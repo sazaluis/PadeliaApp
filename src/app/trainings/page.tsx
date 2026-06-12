@@ -13,8 +13,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Building2, Plus, ChevronLeft, ChevronRight, CalendarDays, MoreHorizontal, Pencil, Trash2, Clock, Dumbbell, Repeat, Loader2 } from "lucide-react";
+import { Building2, Plus, ChevronLeft, ChevronRight, CalendarDays, MoreHorizontal, Pencil, Trash2, Clock, Dumbbell, Repeat, Loader2, CalendarRange } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, addDays } from "date-fns";
+import { ApplyTemplateModal } from "@/components/trainings/apply-template-modal";
 import { es } from "date-fns/locale";
 
 // ── Color palette for teams ──
@@ -150,9 +151,13 @@ export default function TrainingsPage() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
 
-  // Apply templates
+  // Apply templates (old weekly)
   const [showApplyDialog, setShowApplyDialog] = useState(false);
   const [applyingTemplates, setApplyingTemplates] = useState(false);
+
+  // Apply template modal (new multi-step)
+  const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+  const [preselectedTemplateId, setPreselectedTemplateId] = useState<string | null>(null);
 
   // ── Load clubs on mount ──
   useEffect(() => {
@@ -350,7 +355,7 @@ export default function TrainingsPage() {
     }
   };
 
-  const handleApplyTemplates = async () => {
+  const handleApplyTemplatesLegacy = async () => {
     if (!selectedClub) return;
     setApplyingTemplates(true);
     try {
@@ -479,6 +484,11 @@ export default function TrainingsPage() {
             <Button variant="outline" size="sm" onClick={() => setShowTemplatesSheet(true)}>
               <Repeat className="mr-1.5 h-4 w-4" />Plantillas
             </Button>
+            {templates.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => { setPreselectedTemplateId(null); setShowApplyTemplateModal(true); }}>
+                <CalendarRange className="mr-1.5 h-4 w-4" />Aplicar a periodo
+              </Button>
+            )}
             <Sheet open={showSheet} onOpenChange={setShowSheet}>
               <SheetTrigger asChild>
                 <Button><Plus className="mr-2 h-4 w-4" />Nueva sesión</Button>
@@ -653,6 +663,9 @@ export default function TrainingsPage() {
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0 ml-2">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Aplicar a periodo" onClick={() => { setShowTemplatesSheet(false); setPreselectedTemplateId(t.id); setShowApplyTemplateModal(true); }}>
+                        <CalendarRange className="h-3.5 w-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditTemplate(t)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -665,9 +678,16 @@ export default function TrainingsPage() {
               )}
             </div>
             <SheetFooter>
-              <Button onClick={openNewTemplate} className="w-full">
-                <Plus className="mr-2 h-4 w-4" />Nueva plantilla
-              </Button>
+              <div className="space-y-2 w-full">
+                {templates.length > 0 && (
+                  <Button variant="outline" className="w-full" onClick={() => { setShowTemplatesSheet(false); setPreselectedTemplateId(null); setShowApplyTemplateModal(true); }}>
+                    <CalendarRange className="mr-2 h-4 w-4" />Aplicar plantillas a periodo
+                  </Button>
+                )}
+                <Button onClick={openNewTemplate} className="w-full">
+                  <Plus className="mr-2 h-4 w-4" />Nueva plantilla
+                </Button>
+              </div>
             </SheetFooter>
           </SheetContent>
         </Sheet>
@@ -760,7 +780,7 @@ export default function TrainingsPage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Apply Templates AlertDialog */}
+        {/* Apply Templates AlertDialog (legacy weekly) */}
         <AlertDialog open={showApplyDialog} onOpenChange={setShowApplyDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -771,12 +791,22 @@ export default function TrainingsPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleApplyTemplates} disabled={applyingTemplates}>
+              <AlertDialogAction onClick={handleApplyTemplatesLegacy} disabled={applyingTemplates}>
                 {applyingTemplates ? "Aplicando..." : "Aplicar plantillas"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Apply Template Modal (multi-step) */}
+        <ApplyTemplateModal
+          open={showApplyTemplateModal}
+          onOpenChange={setShowApplyTemplateModal}
+          templates={templates}
+          clubId={selectedClub.id}
+          onSuccess={() => { fetchTrainings(); fetchTemplates(); }}
+          preselectedTemplateId={preselectedTemplateId}
+        />
 
         {/* Weekly Navigation */}
         <div className="flex items-center justify-between">
@@ -792,7 +822,7 @@ export default function TrainingsPage() {
           <div className="flex items-center gap-2">
             {templates.length > 0 && (
               <Button variant="outline" size="sm" onClick={() => setShowApplyDialog(true)}>
-                <Loader2 className="mr-1 h-4 w-4" /> Aplicar plantillas
+                <Loader2 className="mr-1 h-4 w-4" /> Aplicar (semana)
               </Button>
             )}
             <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>

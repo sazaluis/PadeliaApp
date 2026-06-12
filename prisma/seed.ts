@@ -117,7 +117,7 @@ async function main() {
   const trainingTitles = ["Táctico", "Técnico", "Físico", "Saque", "Remate"];
   for (let i = 0; i < 3; i++) {
     const training = await prisma.training.create({
-      data: { title: `Entrenamiento ${trainingTitles[i]}`, description: `Sesión de ${trainingTitles[i].toLowerCase()}`, date: new Date(`2024-06-${10 + i * 2}`), startTime: "18:00", endTime: "20:00", duration: 120, facility: "Pista Cubierta", objectives: "Mejorar rendimiento", teamId: team1A.id, coachId: coach1.id },
+      data: { title: `Entrenamiento ${trainingTitles[i]}`, description: `Sesión de ${trainingTitles[i].toLowerCase()}`, date: new Date(`2024-06-${10 + i * 2}`), startTime: "18:00", endTime: "20:00", duration: 120, facility: "Pista Cubierta", objectives: "Mejorar rendimiento", teamId: team1A.id, coachId: coach1.id, clubId: club1.id },
     });
   }
   console.log("✅ Trainings created");

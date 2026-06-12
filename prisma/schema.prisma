@@ -352,12 +352,14 @@ model Training {
   team        Team       @relation(fields: [teamId], references: [id])
   coachId     String?
   coach       Coach?     @relation(fields: [coachId], references: [id])
+  templateId  String?    // ID of the TrainingTemplate that generated this session
   attendances Attendance[]
   players     TrainingPlayer[]
   @@index([clubId])
   @@index([teamId])
   @@index([date])
   @@index([coachId])
+  @@index([templateId])
 }
 
 model TrainingPlayer {
