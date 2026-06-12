@@ -16,7 +16,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Building2, Plus, ChevronLeft, ChevronRight, CalendarDays, MoreHorizontal, Pencil, Trash2, Clock, Dumbbell, Repeat, Loader2, CalendarRange } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, addDays } from "date-fns";
 import { ApplyTemplateModal } from "@/components/trainings/apply-template-modal";
-import { TimeInput, addHourAndHalf } from "@/components/ui/time-input";
+import { TimeInput } from "@/components/ui/time-input";
+import { useTimePair } from "@/hooks/use-time-pair";
 import { es } from "date-fns/locale";
 
 // ── Color palette for teams ──
@@ -116,10 +117,9 @@ export default function TrainingsPage() {
   // New training sheet
   const [showSheet, setShowSheet] = useState(false);
   const [saving, setSaving] = useState(false);
+  const newSessionTime = useTimePair({ initialStart: "10:00", initialEnd: "11:30" });
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
-    startTime: "10:00",
-    endTime: "11:30",
     court: "",
     teamId: "",
     coachId: "",
@@ -224,17 +224,17 @@ export default function TrainingsPage() {
 
   // ── Create training ──
   const handleCreate = async () => {
-    if (!selectedClub || !formData.teamId || !formData.date || !formData.startTime || !formData.endTime) return;
+    if (!selectedClub || !formData.teamId || !formData.date || !newSessionTime.startTime || !newSessionTime.endTime) return;
     setSaving(true);
     try {
       const res = await fetch("/api/trainings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, clubId: selectedClub.id }),
+        body: JSON.stringify({ ...formData, startTime: newSessionTime.startTime, endTime: newSessionTime.endTime, clubId: selectedClub.id }),
       });
       if (!res.ok) throw new Error();
       setShowSheet(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), startTime: "10:00", endTime: "11:30", court: "", teamId: "", coachId: "", notes: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), court: "", teamId: "", coachId: "", notes: "" });
       fetchTrainings();
     } catch {
       alert("Error al crear la sesión");
@@ -503,19 +503,15 @@ export default function TrainingsPage() {
                     <div>
                       <label className="text-sm font-medium">Hora inicio</label>
                       <TimeInput
-                        value={formData.startTime}
-                        onChange={(v) => setFormData({
-                          ...formData,
-                          startTime: v,
-                          endTime: addHourAndHalf(v),
-                        })}
+                        value={newSessionTime.startTime}
+                        onChange={newSessionTime.onStartChange}
                       />
                     </div>
                     <div>
                       <label className="text-sm font-medium">Hora fin</label>
                       <TimeInput
-                        value={formData.endTime}
-                        onChange={(v) => setFormData({ ...formData, endTime: v })}
+                        value={newSessionTime.endTime}
+                        onChange={newSessionTime.onEndChange}
                       />
                     </div>
                   </div>
@@ -555,7 +551,7 @@ export default function TrainingsPage() {
                 </div>
                 <SheetFooter>
                   <Button variant="outline" onClick={() => setShowSheet(false)}>Cancelar</Button>
-                  <Button onClick={handleCreate} disabled={saving || !formData.teamId || !formData.date || !formData.startTime || !formData.endTime}>
+                  <Button onClick={handleCreate} disabled={saving || !formData.teamId || !formData.date || !newSessionTime.startTime || !newSessionTime.endTime}>
                     {saving ? "Guardando..." : "Guardar sesión"}
                   </Button>
                 </SheetFooter>
@@ -576,11 +572,11 @@ export default function TrainingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Hora inicio</label>
-                  <Input type="time" value={editFormData.startTime} onChange={e => setEditFormData({ ...editFormData, startTime: e.target.value })} />
+                  <TimeInput value={editFormData.startTime} onChange={v => setEditFormData({ ...editFormData, startTime: v })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Hora fin</label>
-                  <Input type="time" value={editFormData.endTime} onChange={e => setEditFormData({ ...editFormData, endTime: e.target.value })} />
+                  <TimeInput value={editFormData.endTime} onChange={v => setEditFormData({ ...editFormData, endTime: v })} />
                 </div>
               </div>
               <div>
@@ -716,11 +712,11 @@ export default function TrainingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Hora inicio</label>
-                  <Input type="time" value={templateForm.startTime} onChange={e => setTemplateForm({ ...templateForm, startTime: e.target.value })} />
+                  <TimeInput value={templateForm.startTime} onChange={v => setTemplateForm({ ...templateForm, startTime: v })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Hora fin</label>
-                  <Input type="time" value={templateForm.endTime} onChange={e => setTemplateForm({ ...templateForm, endTime: e.target.value })} />
+                  <TimeInput value={templateForm.endTime} onChange={v => setTemplateForm({ ...templateForm, endTime: v })} />
                 </div>
               </div>
               <div>
