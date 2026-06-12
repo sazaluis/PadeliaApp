@@ -1,0 +1,466 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  surname       String?
+  phone         String?
+  image         String?
+  passwordHash  String
+  role          String    @default("PLAYER")
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  clubId        String?
+  player        Player?
+  coach         Coach?
+  captainTeams  Team[]    @relation("CaptainRelation")
+  accounts      Account[]
+  sessions      Session[]
+  notifications Notification[]
+
+  @@index([email])
+  @@index([role])
+  @@index([clubId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Club {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  city        String
+  address     String?
+  logo        String?
+  phone       String?
+  email       String?
+  website     String?
+  description String?
+  courts      Int       @default(0)
+  schedule    String?   // JSON string with daily schedule {monday:{open,close},...}
+  isActive    Boolean   @default(true)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  teams       Team[]
+  players     Player[]
+  coaches     Coach[]
+  trainings   Training[]
+  trainingTemplates TrainingTemplate[]
+  seasons     Season[]
+  originalPlayers Player[] @relation("OriginalClub")
+  snapshots   ClubDeletionSnapshot[]
+
+  @@index([slug])
+  @@index([city])
+}
+
+model Team {
+  id          String    @id @default(cuid())
+  name        String
+  category    String
+  level       String?
+  entrenador  String?
+  logo        String?
+  deletedAt   DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id])
+  captainId   String?
+  captain     User?    @relation("CaptainRelation", fields: [captainId], references: [id])
+  coachId     String?
+  coach       Coach?   @relation(fields: [coachId], references: [id])
+  players     Player[]
+  homeMatches Match[]  @relation("HomeTeam")
+  awayMatches Match[]  @relation("AwayTeam")
+  convocations Convocation[]
+  trainings   Training[]
+  trainingTemplates TrainingTemplate[]
+  standings   Standing[]
+
+  @@unique([clubId, name, category])
+  @@index([clubId])
+  @@index([category])
+}
+
+model Player {
+  id                String    @id @default(cuid())
+  ranking           Int?
+  level             String?
+  gender            String?
+  dominantHand      String    @default("RIGHT")
+  preferredPosition String?
+  bio               String?
+  profileImage      String?
+  joinDate          DateTime  @default(now())
+  deletedAt         DateTime?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  userId            String    @unique
+  user              User      @relation(fields: [userId], references: [id])
+  teamId            String?
+  team              Team?     @relation(fields: [teamId], references: [id])
+  clubId            String
+  club              Club      @relation(fields: [clubId], references: [id])
+  originalClubId    String?
+  originalClub      Club?     @relation("OriginalClub", fields: [originalClubId], references: [id])
+
+  attendances       Attendance[]
+  convocationPlayers ConvocationPlayer[]
+  trainings         TrainingPlayer[]
+
+  @@index([teamId])
+  @@index([clubId])
+  @@index([originalClubId])
+  @@index([ranking])
+}
+
+model Coach {
+  id              String   @id @default(cuid())
+  specialization  String?
+  certifications  String?
+  experience      Int?
+  bio             String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  clubId          String
+  club            Club     @relation(fields: [clubId], references: [id])
+  teams           Team[]
+  trainings       Training[]
+  trainingTemplates TrainingTemplate[]
+
+  @@index([clubId])
+}
+
+model Season {
+  id          String   @id @default(cuid())
+  name        String
+  year        Int
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("UPCOMING")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clubId      String
+  club        Club     @relation(fields: [clubId], references: [id])
+  leagues     League[]
+  standings   Standing[]
+
+  @@unique([clubId, name])
+  @@index([clubId])
+}
+
+model League {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String
+  level       String?
+  maxTeams    Int      @default(16)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id])
+  matchdays   Matchday[]
+  standings   Standing[]
+
+  @@index([seasonId])
+  @@index([category])
+}
+
+model Matchday {
+  id          String   @id @default(cuid())
+  number      Int
+  name        String?
+  startDate   DateTime
+  endDate     DateTime
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leagueId    String
+  league      League   @relation(fields: [leagueId], references: [id])
+  matches     Match[]
+
+  @@unique([leagueId, number])
+  @@index([leagueId])
+}
+
+model Match {
+  id          String   @id @default(cuid())
+  matchDate   DateTime
+  matchTime   String?
+  court       String?
+  status      String   @default("SCHEDULED")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  matchdayId  String
+  matchday    Matchday @relation(fields: [matchdayId], references: [id])
+  homeTeamId  String
+  homeTeam    Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId  String
+  awayTeam    Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  result      MatchResult?
+  player1Id   String?
+  player2Id   String?
+  player3Id   String?
+  player4Id   String?
+  convocation Convocation?
+
+  @@index([matchdayId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([matchDate])
+  @@index([status])
+}
+
+model MatchResult {
+  id                String   @id @default(cuid())
+  pair1SetsHome     Int
+  pair1SetsAway     Int
+  pair1TiebreakHome Int?
+  pair1TiebreakAway Int?
+  pair2SetsHome     Int
+  pair2SetsAway     Int
+  pair2TiebreakHome Int?
+  pair2TiebreakAway Int?
+  pair3SetsHome     Int
+  pair3SetsAway     Int
+  pair3TiebreakHome Int?
+  pair3TiebreakAway Int?
+  totalSetsHome     Int
+  totalSetsAway     Int
+  totalGamesHome    Int
+  totalGamesAway    Int
+  homePoints        Int      @default(0)
+  awayPoints        Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  matchId           String   @unique
+  match             Match    @relation(fields: [matchId], references: [id])
+  @@index([matchId])
+}
+
+model Convocation {
+  id          String   @id @default(cuid())
+  status      String   @default("DRAFT")
+  notes       String?
+  deadline    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  matchId     String   @unique
+  match       Match    @relation(fields: [matchId], references: [id])
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id])
+  players     ConvocationPlayer[]
+  @@index([matchId])
+  @@index([teamId])
+}
+
+model ConvocationPlayer {
+  id            String   @id @default(cuid())
+  status        String   @default("PENDING")
+  notes         String?
+  confirmedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  convocationId String
+  convocation   Convocation @relation(fields: [convocationId], references: [id])
+  playerId      String
+  player        Player      @relation(fields: [playerId], references: [id])
+  @@unique([convocationId, playerId])
+  @@index([convocationId])
+  @@index([playerId])
+}
+
+model Training {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  startTime   String
+  endTime     String?
+  duration    Int?
+  facility    String?
+  court       String?    // pista/court name
+  objectives  String?
+  notes       String?
+  isCancelled Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  clubId      String
+  club        Club       @relation(fields: [clubId], references: [id])
+  teamId      String
+  team        Team       @relation(fields: [teamId], references: [id])
+  coachId     String?
+  coach       Coach?     @relation(fields: [coachId], references: [id])
+  attendances Attendance[]
+  players     TrainingPlayer[]
+  @@index([clubId])
+  @@index([teamId])
+  @@index([date])
+  @@index([coachId])
+}
+
+model TrainingPlayer {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  trainingId  String
+  training    Training @relation(fields: [trainingId], references: [id])
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+  @@unique([trainingId, playerId])
+}
+
+model Attendance {
+  id          String   @id @default(cuid())
+  status      String   @default("PENDING")
+  notes       String?
+  rating      Int?
+  observation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  trainingId  String
+  training    Training @relation(fields: [trainingId], references: [id])
+  playerId    String
+  player      Player   @relation(fields: [playerId], references: [id])
+  @@unique([trainingId, playerId])
+  @@index([trainingId])
+  @@index([playerId])
+  @@index([status])
+}
+
+model Standing {
+  id            String   @id @default(cuid())
+  position      Int
+  matchesPlayed Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  setsWon       Int      @default(0)
+  setsLost      Int      @default(0)
+  gamesWon      Int      @default(0)
+  gamesLost     Int      @default(0)
+  points        Int      @default(0)
+  pointsFor     Int      @default(0)
+  pointsAgainst Int      @default(0)
+  updatedAt     DateTime @updatedAt
+  teamId        String
+  team          Team     @relation(fields: [teamId], references: [id])
+  leagueId      String
+  league        League   @relation(fields: [leagueId], references: [id])
+  seasonId      String
+  season        Season   @relation(fields: [seasonId], references: [id])
+  @@unique([leagueId, teamId])
+  @@index([leagueId])
+  @@index([teamId])
+  @@index([position])
+}
+
+model ClubDeletionSnapshot {
+  id            String   @id @default(cuid())
+  clubId        String
+  club          Club     @relation(fields: [clubId], references: [id])
+  clubName      String
+  deletedAt     DateTime @default(now())
+  teamsSnapshot String
+  restoredAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([clubId])
+  @@index([deletedAt])
+}
+
+model TrainingTemplate {
+  id          String   @id @default(cuid())
+  clubId      String
+  teamId      String
+  coachId     String?
+  court       String?
+  dayOfWeek   Int      // 0=Monday ... 6=Sunday
+  startTime   String   // "HH:mm"
+  endTime     String   // "HH:mm"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  club        Club     @relation(fields: [clubId], references: [id])
+  team        Team     @relation(fields: [teamId], references: [id])
+  coach       Coach?   @relation(fields: [coachId], references: [id])
+
+  @@index([clubId])
+  @@index([teamId])
+  @@index([isActive])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   @default("GENERAL")
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
