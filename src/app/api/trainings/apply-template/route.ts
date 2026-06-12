@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prismadb from "@/lib/prisma";
-import { addDays, getISOWeek, startOfWeek, endOfWeek } from "date-fns";
 
 export async function POST(req: Request) {
   try {
@@ -71,13 +70,12 @@ export async function POST(req: Request) {
 
     if (mode === "monthly") {
       startDate = new Date(year, month! - 1, 1);
-      endDate = new Date(year, month!, 0); // last day of month
+      endDate = new Date(year, month!, 0);
     } else if (mode === "quarterly") {
       const startMonth = (quarter! - 1) * 3;
       startDate = new Date(year, startMonth, 1);
-      endDate = new Date(year, startMonth + 3, 0); // last day of quarter
+      endDate = new Date(year, startMonth + 3, 0);
     } else {
-      // annual
       startDate = new Date(year, 0, 1);
       endDate = new Date(year, 11, 31);
     }
@@ -85,7 +83,6 @@ export async function POST(req: Request) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Check if range includes past dates
     const hasPastDates = startDate < today;
 
     // Generate all dates in range that match the template's dayOfWeek
@@ -93,11 +90,7 @@ export async function POST(req: Request) {
     const current = new Date(startDate);
 
     while (current <= endDate) {
-      // dayOfWeek: 0=Monday ... 6=Sunday
-      // getDay(): 0=Sunday ... 6=Saturday
-      // Convert: getDay() 0 -> 6 (Sunday), getDay() 1 -> 0 (Monday), etc.
       const isoDay = current.getDay() === 0 ? 6 : current.getDay() - 1;
-
       if (isoDay === template.dayOfWeek) {
         const dateStr = current.toISOString().split("T")[0];
         sessionsToCreate.push({ date: new Date(current), dateStr });
@@ -130,16 +123,14 @@ export async function POST(req: Request) {
     let skipped = 0;
 
     const result = await prismadb.$transaction(async (tx) => {
-      // If replacing, delete existing trainings first
       if (onConflict === "replace" && existingTrainings.length > 0) {
         for (const t of existingTrainings) {
           await tx.training.delete({ where: { id: t.id } });
         }
       }
 
-      // Create new sessions
-      for (const session of sessionsToCreate) {
-        if (existingDates.has(session.dateStr) && onConflict === "skip") {
+      for (const sess of sessionsToCreate) {
+        if (existingDates.has(sess.dateStr) && onConflict === "skip") {
           skipped++;
           continue;
         }
@@ -151,7 +142,7 @@ export async function POST(req: Request) {
             teamId: template.teamId,
             coachId: template.coachId,
             court: template.court,
-            date: session.date,
+            date: sess.date,
             startTime: template.startTime,
             endTime: template.endTime,
             templateId: templateId,

@@ -16,6 +16,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Building2, Plus, ChevronLeft, ChevronRight, CalendarDays, MoreHorizontal, Pencil, Trash2, Clock, Dumbbell, Repeat, Loader2, CalendarRange } from "lucide-react";
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, addDays } from "date-fns";
 import { ApplyTemplateModal } from "@/components/trainings/apply-template-modal";
+import { TimeInput, addHourAndHalf } from "@/components/ui/time-input";
 import { es } from "date-fns/locale";
 
 // ── Color palette for teams ──
@@ -118,7 +119,7 @@ export default function TrainingsPage() {
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     startTime: "10:00",
-    endTime: "11:00",
+    endTime: "11:30",
     court: "",
     teamId: "",
     coachId: "",
@@ -151,11 +152,11 @@ export default function TrainingsPage() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
 
-  // Apply templates (old weekly)
+  // Apply templates (legacy weekly)
   const [showApplyDialog, setShowApplyDialog] = useState(false);
   const [applyingTemplates, setApplyingTemplates] = useState(false);
 
-  // Apply template modal (new multi-step)
+  // Apply template modal (multi-step)
   const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
   const [preselectedTemplateId, setPreselectedTemplateId] = useState<string | null>(null);
 
@@ -233,7 +234,7 @@ export default function TrainingsPage() {
       });
       if (!res.ok) throw new Error();
       setShowSheet(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), startTime: "10:00", endTime: "11:00", court: "", teamId: "", coachId: "", notes: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), startTime: "10:00", endTime: "11:30", court: "", teamId: "", coachId: "", notes: "" });
       fetchTrainings();
     } catch {
       alert("Error al crear la sesión");
@@ -426,7 +427,6 @@ export default function TrainingsPage() {
 
   const isToday = (d: Date) => format(d, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd");
 
-  // Generate court list from the club
   const courtOptions = getCourtList(selectedClub);
 
   const TrainingCard = ({ training }: { training: Training }) => (
@@ -434,7 +434,6 @@ export default function TrainingsPage() {
       <div
         className="rounded-lg border bg-card p-2.5 cursor-pointer transition-shadow hover:shadow-sm"
         style={{ borderLeft: `3px solid ${getTeamColor(training.team.id)}` }}
-        onClick={() => console.log("Session ID:", training.id)}
       >
         <div className="flex items-start justify-between gap-1">
           <div className="flex-1 min-w-0">
@@ -449,14 +448,14 @@ export default function TrainingsPage() {
             )}
           </div>
           <div className="relative">
-            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); }}>
+            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity">
               <MoreHorizontal className="h-3 w-3" />
             </Button>
             <div className="absolute right-0 top-0 hidden group-hover:flex flex-col bg-popover border rounded-md shadow-md z-10 min-w-[100px]">
-              <button className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors" onClick={(e) => { e.stopPropagation(); openEdit(training); }}>
+              <button className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors" onClick={() => openEdit(training)}>
                 <Pencil className="h-3 w-3" /> Editar
               </button>
-              <button className="flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-muted transition-colors" onClick={(e) => { e.stopPropagation(); setDeleteId(training.id); }}>
+              <button className="flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-muted transition-colors" onClick={() => setDeleteId(training.id)}>
                 <Trash2 className="h-3 w-3" /> Eliminar
               </button>
             </div>
@@ -503,11 +502,21 @@ export default function TrainingsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-sm font-medium">Hora inicio</label>
-                      <Input type="time" value={formData.startTime} onChange={e => setFormData({ ...formData, startTime: e.target.value })} />
+                      <TimeInput
+                        value={formData.startTime}
+                        onChange={(v) => setFormData({
+                          ...formData,
+                          startTime: v,
+                          endTime: addHourAndHalf(v),
+                        })}
+                      />
                     </div>
                     <div>
                       <label className="text-sm font-medium">Hora fin</label>
-                      <Input type="time" value={formData.endTime} onChange={e => setFormData({ ...formData, endTime: e.target.value })} />
+                      <TimeInput
+                        value={formData.endTime}
+                        onChange={(v) => setFormData({ ...formData, endTime: v })}
+                      />
                     </div>
                   </div>
                   <div>
@@ -620,9 +629,7 @@ export default function TrainingsPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Eliminar sesión</AlertDialogTitle>
-              <AlertDialogDescription>
-                ¿Estás seguro de que deseas eliminar esta sesión de entrenamiento? Esta acción no se puede deshacer.
-              </AlertDialogDescription>
+              <AlertDialogDescription>¿Estás seguro de que deseas eliminar esta sesión de entrenamiento? Esta acción no se puede deshacer.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -638,9 +645,7 @@ export default function TrainingsPage() {
           <SheetContent className="w-full sm:max-w-md overflow-y-auto">
             <SheetHeader>
               <SheetTitle>Plantillas de entrenamiento</SheetTitle>
-              <SheetDescription>
-                Define sesiones recurrentes que se repiten cada semana
-              </SheetDescription>
+              <SheetDescription>Define sesiones recurrentes que se repiten cada semana</SheetDescription>
             </SheetHeader>
             <div className="py-4 space-y-3">
               {templates.length === 0 ? (
@@ -653,9 +658,7 @@ export default function TrainingsPage() {
                 templates.map(t => (
                   <div key={t.id} className="flex items-start justify-between rounded-lg border p-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">
-                        {DAY_LABELS[t.dayOfWeek]} · {t.startTime}{t.endTime ? ` - ${t.endTime}` : ""}
-                      </p>
+                      <p className="text-sm font-medium">{DAY_LABELS[t.dayOfWeek]} · {t.startTime}{t.endTime ? ` - ${t.endTime}` : ""}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">{t.team.name}</p>
                       <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
                         {t.court && <span>{t.court}</span>}
@@ -701,10 +704,7 @@ export default function TrainingsPage() {
             <div className="space-y-4 py-4">
               <div>
                 <label className="text-sm font-medium">Día de la semana</label>
-                <Select
-                  value={String(templateForm.dayOfWeek)}
-                  onValueChange={v => setTemplateForm({ ...templateForm, dayOfWeek: parseInt(v) })}
-                >
+                <Select value={String(templateForm.dayOfWeek)} onValueChange={v => setTemplateForm({ ...templateForm, dayOfWeek: parseInt(v) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {DAY_LABELS.map((label, idx) => (
@@ -767,15 +767,11 @@ export default function TrainingsPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Eliminar plantilla</AlertDialogTitle>
-              <AlertDialogDescription>
-                ¿Estás seguro de que deseas eliminar esta plantilla? Las sesiones ya creadas no se verán afectadas.
-              </AlertDialogDescription>
+              <AlertDialogDescription>¿Estás seguro de que deseas eliminar esta plantilla? Las sesiones ya creadas no se verán afectadas.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteTemplate}>
-                Eliminar
-              </AlertDialogAction>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDeleteTemplate}>Eliminar</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -869,14 +865,12 @@ export default function TrainingsPage() {
               const today = isToday(day);
               return (
                 <div key={idx} className="min-h-[200px]">
-                  {/* Day header */}
                   <div className="text-center mb-3">
                     <p className="text-xs text-muted-foreground">{DAYS_SHORT[idx]}</p>
                     <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium ${today ? "bg-primary text-primary-foreground" : ""}`}>
                       {day.getDate()}
                     </div>
                   </div>
-                  {/* Sessions */}
                   <div className="space-y-1.5">
                     {dayTrainings.map(t => <TrainingCard key={t.id} training={t} />)}
                     {dayTrainings.length === 0 && (
