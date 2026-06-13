@@ -576,11 +576,11 @@ export default function TrainingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Hora inicio</label>
-                  <Input type="time" value={editFormData.startTime} onChange={e => setEditFormData({ ...editFormData, startTime: e.target.value })} />
+                  <TimeInput value={editFormData.startTime} onChange={v => setEditFormData({ ...editFormData, startTime: v })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Hora fin</label>
-                  <Input type="time" value={editFormData.endTime} onChange={e => setEditFormData({ ...editFormData, endTime: e.target.value })} />
+                  <TimeInput value={editFormData.endTime} onChange={v => setEditFormData({ ...editFormData, endTime: v })} />
                 </div>
               </div>
               <div>
@@ -716,11 +716,18 @@ export default function TrainingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Hora inicio</label>
-                  <Input type="time" value={templateForm.startTime} onChange={e => setTemplateForm({ ...templateForm, startTime: e.target.value })} />
+                  <TimeInput
+                    value={templateForm.startTime}
+                    onChange={v => setTemplateForm({
+                      ...templateForm,
+                      startTime: v,
+                      endTime: addHourAndHalf(v),
+                    })}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Hora fin</label>
-                  <Input type="time" value={templateForm.endTime} onChange={e => setTemplateForm({ ...templateForm, endTime: e.target.value })} />
+                  <TimeInput value={templateForm.endTime} onChange={v => setTemplateForm({ ...templateForm, endTime: v })} />
                 </div>
               </div>
               <div>
