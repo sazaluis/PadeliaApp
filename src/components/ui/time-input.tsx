@@ -45,36 +45,41 @@ export function TimeInput({ value, onChange, disabled, className }: TimeInputPro
   };
 
   return (
-    <div className={cn("flex flex-col items-center", className ?? "")}>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-5 w-5"
-        onClick={() => handleChange(15)}
-        disabled={disabled}
-        tabIndex={-1}
-      >
-        <ChevronUp className="h-3 w-3" />
-      </Button>
+    <div
+      className={cn(
+        "flex flex-row items-center gap-1 rounded-md border border-input bg-background px-1",
+        className ?? ""
+      )}
+    >
       <input
         type="time"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ appearance: "none" }}
+        className="flex h-9 min-w-0 flex-1 border-0 bg-transparent px-1 py-1 text-center text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ WebkitAppearance: "none", MozAppearance: "textfield" }}
       />
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="h-5 w-5"
+        className="h-9 w-9 shrink-0"
+        onClick={() => handleChange(15)}
+        disabled={disabled}
+        tabIndex={-1}
+      >
+        <ChevronUp className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 shrink-0"
         onClick={() => handleChange(-15)}
         disabled={disabled}
         tabIndex={-1}
       >
-        <ChevronDown className="h-3 w-3" />
+        <ChevronDown className="h-3.5 w-3.5" />
       </Button>
     </div>
   );

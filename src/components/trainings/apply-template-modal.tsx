@@ -79,7 +79,7 @@ export function ApplyTemplateModal({
   preselectedTemplateId,
 }: ApplyTemplateModalProps) {
   const [step, setStep] = useState(1);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"monthly" | "quarterly" | "annual">("monthly");
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -92,7 +92,7 @@ export function ApplyTemplateModal({
   useEffect(() => {
     if (open) {
       setStep(1);
-      setSelectedTemplateId(preselectedTemplateId || "");
+      setSelectedTemplateIds(preselectedTemplateId ? [preselectedTemplateId] : []);
       setMode("monthly");
       setSelectedYear(new Date().getFullYear());
       setSelectedMonth(new Date().getMonth() + 1);
@@ -108,12 +108,19 @@ export function ApplyTemplateModal({
     if (open && preselectedTemplateId) setStep(2);
   }, [open, preselectedTemplateId]);
 
-  const selectedTemplate = useMemo(() => templates.find((t) => t.id === selectedTemplateId), [templates, selectedTemplateId]);
+  const selectedTemplates = useMemo(
+    () => templates.filter((t) => selectedTemplateIds.includes(t.id)),
+    [templates, selectedTemplateIds]
+  );
   const dateRange = useMemo(() => getDateRange(mode, selectedYear, selectedMonth, selectedQuarter), [mode, selectedYear, selectedMonth, selectedQuarter]);
-  const sessionCount = useMemo(() => {
-    if (!selectedTemplate || !dateRange) return 0;
-    return calculateSessionCount(selectedTemplate, dateRange.start, dateRange.end);
-  }, [selectedTemplate, dateRange]);
+
+  const totalSessionCount = useMemo(() => {
+    if (selectedTemplates.length === 0 || !dateRange) return 0;
+    return selectedTemplates.reduce(
+      (sum, t) => sum + calculateSessionCount(t, dateRange.start, dateRange.end),
+      0
+    );
+  }, [selectedTemplates, dateRange]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -121,8 +128,14 @@ export function ApplyTemplateModal({
   const currentYear = new Date().getFullYear();
   const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 
+  const toggleTemplate = (id: string) => {
+    setSelectedTemplateIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const handleConfirm = async () => {
-    if (!selectedTemplateId || !dateRange) return;
+    if (selectedTemplateIds.length === 0 || !dateRange) return;
     setLoading(true);
     setError("");
     try {
@@ -130,7 +143,7 @@ export function ApplyTemplateModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          templateId: selectedTemplateId,
+          templateIds: selectedTemplateIds,
           mode,
           year: selectedYear,
           month: mode === "monthly" ? selectedMonth : undefined,
@@ -139,7 +152,7 @@ export function ApplyTemplateModal({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Error al aplicar la plantilla"); setLoading(false); return; }
+      if (!res.ok) { setError(data.error || "Error al aplicar las plantillas"); setLoading(false); return; }
       setResult({ created: data.created, skipped: data.skipped });
       setLoading(false);
     } catch { setError("Error de conexión"); setLoading(false); }
@@ -149,34 +162,45 @@ export function ApplyTemplateModal({
 
   const renderStep1 = () => (
     <div className="space-y-4">
-      <DialogDescription>Selecciona la plantilla de entrenamiento que deseas aplicar a un periodo completo.</DialogDescription>
+      <DialogDescription>Selecciona una o varias plantillas de entrenamiento para aplicar a un periodo completo.</DialogDescription>
       <div className="space-y-2 max-h-[300px] overflow-y-auto">
         {templates.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground"><Repeat className="h-8 w-8 mx-auto mb-2 opacity-30" /><p className="text-sm">No hay plantillas activas</p></div>
-        ) : templates.map((t) => (
-          <button key={t.id} className={`w-full text-left rounded-lg border p-3 transition-all ${selectedTemplateId === t.id ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50"}`} onClick={() => setSelectedTemplateId(t.id)}>
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{DAY_LABELS[t.dayOfWeek]} · {t.startTime} - {t.endTime}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{t.team.name}</p>
-                <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
-                  {t.court && <span>{t.court}</span>}
-                  {t.coach && <span>{t.coach.user.name} {t.coach.user.surname}</span>}
+        ) : templates.map((t) => {
+          const isSelected = selectedTemplateIds.includes(t.id);
+          return (
+            <button key={t.id} className={`w-full text-left rounded-lg border p-3 transition-all ${isSelected ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50"}`} onClick={() => toggleTemplate(t.id)}>
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{DAY_LABELS[t.dayOfWeek]} · {t.startTime} - {t.endTime}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{t.team.name}</p>
+                  <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+                    {t.court && <span>{t.court}</span>}
+                    {t.coach && <span>{t.coach.user.name} {t.coach.user.surname}</span>}
+                  </div>
                 </div>
+                {isSelected && <Check className="h-4 w-4 text-primary shrink-0 mt-1" />}
               </div>
-              {selectedTemplateId === t.id && <Check className="h-4 w-4 text-primary shrink-0 mt-1" />}
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
+      {selectedTemplateIds.length > 0 && (
+        <p className="text-xs text-muted-foreground text-center">{selectedTemplateIds.length} plantilla{selectedTemplateIds.length > 1 ? "s" : ""} seleccionada{selectedTemplateIds.length > 1 ? "s" : ""}</p>
+      )}
     </div>
   );
 
   const renderStep2 = () => (
     <div className="space-y-4">
       <DialogDescription>
-        Elige el periodo para la plantilla <strong>{DAY_LABELS[selectedTemplate!.dayOfWeek]} {selectedTemplate!.startTime}</strong> del equipo <strong>{selectedTemplate!.team.name}</strong>.
+        Configura el periodo para {selectedTemplates.length} plantilla{selectedTemplates.length > 1 ? "s" : ""} seleccionada{selectedTemplates.length > 1 ? "s" : ""}.
       </DialogDescription>
+      <div className="flex flex-wrap gap-1.5">
+        {selectedTemplates.map((t) => (
+          <Badge key={t.id} variant="secondary" className="text-xs">{DAY_LABELS[t.dayOfWeek]} {t.startTime} · {t.team.name}</Badge>
+        ))}
+      </div>
       <div>
         <label className="text-sm font-medium mb-2 block">Tipo de periodo</label>
         <div className="grid grid-cols-3 gap-2">
@@ -215,7 +239,7 @@ export function ApplyTemplateModal({
       {dateRange && (
         <div className="rounded-lg bg-muted/50 p-3 space-y-1">
           <p className="text-sm font-medium"><Calendar className="inline h-4 w-4 mr-1" />{formatDateRange(dateRange.start, dateRange.end)}</p>
-          <p className="text-sm text-muted-foreground">Se crearán <strong className="text-foreground">{sessionCount}</strong> sesiones</p>
+          <p className="text-sm text-muted-foreground">Se crearán <strong className="text-foreground">{totalSessionCount}</strong> sesiones en total ({selectedTemplates.length} plantilla{selectedTemplates.length > 1 ? "s" : ""})</p>
           {hasPastDates && <p className="text-xs text-amber-600 flex items-center gap-1 mt-1"><AlertTriangle className="h-3 w-3" />El periodo incluye fechas pasadas</p>}
         </div>
       )}
@@ -237,10 +261,22 @@ export function ApplyTemplateModal({
         <>
           <DialogDescription>Revisa los detalles antes de crear las sesiones.</DialogDescription>
           <div className="rounded-lg border p-4 space-y-3">
-            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Plantilla</span><span className="text-sm font-medium">{DAY_LABELS[selectedTemplate!.dayOfWeek]} {selectedTemplate!.startTime}</span></div>
-            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Equipo</span><span className="text-sm font-medium">{selectedTemplate!.team.name}</span></div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Plantillas</span>
+              <span className="text-sm font-medium">{selectedTemplates.length} seleccionada{selectedTemplates.length > 1 ? "s" : ""}</span>
+            </div>
+            <div className="space-y-1.5">
+              {selectedTemplates.map((t) => (
+                <div key={t.id} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{DAY_LABELS[t.dayOfWeek]} {t.startTime} · {t.team.name}</span>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {dateRange ? calculateSessionCount(t, dateRange.start, dateRange.end) : 0} sesiones
+                  </Badge>
+                </div>
+              ))}
+            </div>
             <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Periodo</span><span className="text-sm font-medium">{dateRange && formatDateRange(dateRange.start, dateRange.end)}</span></div>
-            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Sesiones</span><Badge variant="secondary">{sessionCount}</Badge></div>
+            <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Total sesiones</span><Badge variant="secondary">{totalSessionCount}</Badge></div>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Si ya existen sesiones en este periodo:</label>
@@ -265,7 +301,7 @@ export function ApplyTemplateModal({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Aplicar plantilla a periodo</DialogTitle>
+          <DialogTitle>Aplicar plantillas a periodo</DialogTitle>
           <div className="flex items-center gap-2 pt-2">
             {[1, 2, 3].map((s) => (
               <div key={s} className="flex items-center gap-2">
@@ -274,7 +310,7 @@ export function ApplyTemplateModal({
               </div>
             ))}
             <div className="flex gap-4 ml-2 text-xs text-muted-foreground">
-              <span className={step === 1 ? "text-foreground font-medium" : ""}>Plantilla</span>
+              <span className={step === 1 ? "text-foreground font-medium" : ""}>Plantillas</span>
               <span className={step === 2 ? "text-foreground font-medium" : ""}>Periodo</span>
               <span className={step === 3 ? "text-foreground font-medium" : ""}>Confirmar</span>
             </div>
@@ -287,7 +323,7 @@ export function ApplyTemplateModal({
         </div>
         <DialogFooter>
           {step > 1 && !result && <Button variant="outline" onClick={() => setStep(step - 1)}><ChevronLeft className="h-4 w-4 mr-1" /> Atrás</Button>}
-          {step < 3 && <Button onClick={() => setStep(step + 1)} disabled={step === 1 ? !selectedTemplateId : !(dateRange && sessionCount > 0)}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button>}
+          {step < 3 && <Button onClick={() => setStep(step + 1)} disabled={step === 1 ? selectedTemplateIds.length === 0 : !(dateRange && totalSessionCount > 0)}>Siguiente <ChevronRight className="h-4 w-4 ml-1" /></Button>}
           {step === 3 && !result && (
             <>
               <Button variant="outline" onClick={handleClose}>Cancelar</Button>

@@ -17,7 +17,7 @@ import { Building2, Plus, ChevronLeft, ChevronRight, CalendarDays, MoreHorizonta
 import { startOfWeek, endOfWeek, addWeeks, subWeeks, format, addDays } from "date-fns";
 import { ApplyTemplateModal } from "@/components/trainings/apply-template-modal";
 import { TimeInput } from "@/components/ui/time-input";
-import { useTimePair } from "@/hooks/use-time-pair";
+import { useTimePair, addMinutes } from "@/hooks/use-time-pair";
 import { es } from "date-fns/locale";
 
 // ── Color palette for teams ──
@@ -295,7 +295,7 @@ export default function TrainingsPage() {
     setTemplateForm({
       dayOfWeek: 0,
       startTime: "10:00",
-      endTime: "11:00",
+      endTime: "11:30",
       court: "",
       teamId: "",
       coachId: "",
@@ -712,7 +712,14 @@ export default function TrainingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium">Hora inicio</label>
-                  <TimeInput value={templateForm.startTime} onChange={v => setTemplateForm({ ...templateForm, startTime: v })} />
+                  <TimeInput value={templateForm.startTime} onChange={v => {
+                    const newStart = v;
+                    setTemplateForm(prev => ({
+                      ...prev,
+                      startTime: newStart,
+                      endTime: newStart >= "22:30" ? "23:59" : addMinutes(newStart, 90),
+                    }));
+                  }} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Hora fin</label>
