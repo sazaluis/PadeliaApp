@@ -101,13 +101,18 @@ async function main() {
   }
 
   // Matchdays
+  const startDateBase = new Date("2024-10-07");
   for (let i = 1; i <= 4; i++) {
+    const start = new Date(startDateBase);
+    start.setDate(start.getDate() + (i - 1) * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
     const matchday = await prisma.matchday.create({
-      data: { number: i, name: `Jornada ${i}`, startDate: new Date(`2024-10-${i * 7 + 7}`), endDate: new Date(`2024-10-${i * 7 + 8}`), leagueId: league.id },
+      data: { number: i, name: `Jornada ${i}`, startDate: start, endDate: end, leagueId: league.id },
     });
     if (i <= 2) {
       await prisma.match.create({
-        data: { matchDate: new Date(`2024-10-${i * 7 + 7}`), matchTime: "10:00", court: "Pista 1", status: "COMPLETED", homeTeamId: team1A.id, awayTeamId: team1B.id, matchdayId: matchday.id },
+        data: { matchDate: start, matchTime: "10:00", court: "Pista 1", status: "COMPLETED", homeTeamId: team1A.id, awayTeamId: team1B.id, matchdayId: matchday.id },
       });
     }
   }

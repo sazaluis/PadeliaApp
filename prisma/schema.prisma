@@ -77,6 +77,7 @@ model Club {
   email       String?
   website     String?
   description String?
+  responsable String?
   courts      Int       @default(0)
   schedule    String?   // JSON string with daily schedule {monday:{open,close},...}
   isActive    Boolean   @default(true)
@@ -89,6 +90,7 @@ model Club {
   coaches     Coach[]
   trainings   Training[]
   trainingTemplates TrainingTemplate[]
+  convocatorias Convocatoria[]
   seasons     Season[]
   originalPlayers Player[] @relation("OriginalClub")
   snapshots   ClubDeletionSnapshot[]
@@ -118,6 +120,7 @@ model Team {
   players     Player[]
   homeMatches Match[]  @relation("HomeTeam")
   awayMatches Match[]  @relation("AwayTeam")
+  convocatorias Convocatoria[]
   convocations Convocation[]
   trainings   Training[]
   trainingTemplates TrainingTemplate[]
@@ -154,6 +157,9 @@ model Player {
 
   attendances       Attendance[]
   convocationPlayers ConvocationPlayer[]
+  convocatoriaJugadores ConvocatoriaJugador[]
+  parejasComoJugador1 Pareja[] @relation("ParejaJugador1")
+  parejasComoJugador2 Pareja[] @relation("ParejaJugador2")
   trainings         TrainingPlayer[]
 
   @@index([teamId])
@@ -248,11 +254,13 @@ model Match {
   court       String?
   status      String   @default("SCHEDULED")
   notes       String?
+  observations String?   // texto libre de observaciones del partido
+  photos      String?   // JSON array de URLs/rutas de fotos
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  matchdayId  String
-  matchday    Matchday @relation(fields: [matchdayId], references: [id])
+  matchdayId  String?
+  matchday    Matchday? @relation(fields: [matchdayId], references: [id])
   homeTeamId  String
   homeTeam    Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
   awayTeamId  String
@@ -274,24 +282,33 @@ model Match {
 
 model MatchResult {
   id                String   @id @default(cuid())
-  pair1SetsHome     Int
-  pair1SetsAway     Int
+  pair1SetsHome     Int      @default(0)
+  pair1SetsAway     Int      @default(0)
   pair1TiebreakHome Int?
   pair1TiebreakAway Int?
-  pair2SetsHome     Int
-  pair2SetsAway     Int
+  pair2SetsHome     Int      @default(0)
+  pair2SetsAway     Int      @default(0)
   pair2TiebreakHome Int?
   pair2TiebreakAway Int?
-  pair3SetsHome     Int
-  pair3SetsAway     Int
+  pair3SetsHome     Int      @default(0)
+  pair3SetsAway     Int      @default(0)
   pair3TiebreakHome Int?
   pair3TiebreakAway Int?
-  totalSetsHome     Int
-  totalSetsAway     Int
-  totalGamesHome    Int
-  totalGamesAway    Int
+  totalSetsHome     Int      @default(0)
+  totalSetsAway     Int      @default(0)
+  totalGamesHome    Int      @default(0)
+  totalGamesAway    Int      @default(0)
   homePoints        Int      @default(0)
   awayPoints        Int      @default(0)
+  // Resultado simplificado por sets (local vs visitante)
+  set1Local         Int?
+  set1Visitor       Int?
+  set2Local         Int?
+  set2Visitor       Int?
+  set3Local         Int?
+  set3Visitor       Int?
+  localSets         Int?     // sets ganados por el equipo local
+  visitorSets       Int?     // sets ganados por el equipo visitante
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   matchId           String   @unique
@@ -450,6 +467,66 @@ model TrainingTemplate {
   @@index([clubId])
   @@index([teamId])
   @@index([isActive])
+}
+
+model Convocatoria {
+  id                String    @id @default(cuid())
+  clubId            String
+  teamId            String
+  rival             String
+  matchDate         DateTime
+  deadline          DateTime
+  status            String    @default("BORRADOR")
+  lastModifiedBy    String?
+  lastModifiedByUserId String?
+  numParejas        Int       @default(3)
+  matchId           String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  club              Club                @relation(fields: [clubId], references: [id])
+  team              Team                @relation(fields: [teamId], references: [id])
+  jugadores         ConvocatoriaJugador[]
+  parejas           Pareja[]
+
+  @@index([clubId])
+  @@index([teamId])
+  @@index([status])
+}
+
+model ConvocatoriaJugador {
+  id              String   @id @default(cuid())
+  convocatoriaId  String
+  playerId        String
+  disponibilidad  String   @default("PENDIENTE")
+  updatedBy       String?
+  updatedByName   String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  convocatoria    Convocatoria   @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  player          Player         @relation(fields: [playerId], references: [id])
+
+  @@unique([convocatoriaId, playerId])
+  @@index([convocatoriaId])
+  @@index([playerId])
+}
+
+model Pareja {
+  id              String      @id @default(cuid())
+  numero          Int
+  convocatoriaId  String
+  jugador1Id      String?
+  jugador2Id      String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  convocatoria    Convocatoria @relation(fields: [convocatoriaId], references: [id], onDelete: Cascade)
+  jugador1        Player?     @relation("ParejaJugador1", fields: [jugador1Id], references: [id])
+  jugador2        Player?     @relation("ParejaJugador2", fields: [jugador2Id], references: [id])
+
+  @@unique([convocatoriaId, numero])
+  @@index([convocatoriaId])
 }
 
 model Notification {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,17 +25,21 @@ interface Team {
   coach?: { id: string; user: { name: string; surname: string } };
   _count: { players: number };
 }
-interface Club { id: string; name: string; }
+interface Club { id: string; name: string; city: string; }
 
 export default function TeamsPage() {
+  const { data: session } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
   const clubIdFilter = searchParams.get("clubId");
-
+  
   const [teams, setTeams] = useState<Team[]>([]);
   const [deletedTeams, setDeletedTeams] = useState<Team[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedClubId, setSelectedClubId] = useState<string>(clubIdFilter || userClubId || "");
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [filterClub, setFilterClub] = useState("ALL");
@@ -63,9 +68,23 @@ export default function TeamsPage() {
   const [restoring, setRestoring] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"all" | "byClub">("all");
 
+  useEffect(() => {
+    if (userRole === "GLOBAL_ADMIN") {
+      fetch("/api/clubs")
+        .then(r => r.json())
+        .then(data => {
+          setClubs(Array.isArray(data) ? data : []);
+          if (!selectedClubId && data.length > 0) {
+            setSelectedClubId(data[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userRole]);
+
   const fetchData = () => {
     setLoading(true);
-    const base = clubIdFilter ? `?clubId=${clubIdFilter}` : "";
+    const base = selectedClubId ? `?clubId=${selectedClubId}` : "";
     Promise.all([
       fetch(`/api/teams${base}`).then(r => r.json()),
       fetch(`/api/teams${base}${base ? "&" : "?"}deleted=true`).then(r => r.json()),
@@ -76,7 +95,7 @@ export default function TeamsPage() {
     }).catch(() => setLoading(false));
   };
 
-  useEffect(() => { fetchData(); }, [clubIdFilter]);
+  useEffect(() => { fetchData(); }, [selectedClubId]);
   useEffect(() => { fetch("/api/clubs").then(r => r.json()).then(d => setClubs(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
   useEffect(() => {
     if (selectedTeam?.club?.id) {
@@ -86,7 +105,7 @@ export default function TeamsPage() {
     }
   }, [selectedTeam?.club?.id]);
 
-  const filteredClub = clubIdFilter ? clubs.find(c => c.id === clubIdFilter) : null;
+  const filteredClub = selectedClubId ? clubs.find(c => c.id === selectedClubId) : null;
 
   const applyFilters = (list: Team[]) => {
     return list.filter(t => {
@@ -274,9 +293,26 @@ export default function TeamsPage() {
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {clubIdFilter && <Button variant="ghost" size="icon" onClick={() => router.push("/clubs")}><ArrowLeft className="h-5 w-5" /></Button>}
+            {selectedClubId && userRole !== "GLOBAL_ADMIN" && <Button variant="ghost" size="icon" onClick={() => router.push("/clubs")}><ArrowLeft className="h-5 w-5" /></Button>}
             <div><h1 className="text-3xl font-bold tracking-tight">Equipos</h1><p className="text-muted-foreground">{filteredClub ? `Equipos de ${filteredClub.name}` : "Gestión de equipos"}</p></div>
           </div>
+          {userRole === "GLOBAL_ADMIN" && clubs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedClubId} onValueChange={setSelectedClubId}>
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Seleccionar club" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clubs.map(club => (
+                    <SelectItem key={club.id} value={club.id}>
+                      {club.name} - {club.city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Dialog open={showForm} onOpenChange={setShowForm}>
             <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nuevo Equipo</Button></DialogTrigger>
             <DialogContent>

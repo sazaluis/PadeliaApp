@@ -19,54 +19,305 @@ import {
   CheckCircle,
   AlertCircle,
   Swords,
+  Building2,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+interface Team {
+  id: string;
+  name: string;
+  category: string;
+  club: { name: string };
+  _count: { players: number };
+}
+
+interface Match {
+  id: string;
+  matchDate: string;
+  matchTime: string | null;
+  court: string | null;
+  status: string;
+  homeTeam: { id: string; name: string; category: string };
+  awayTeam: { id: string; name: string; category: string };
+  matchday?: { number: number; name: string };
+}
+
+interface Training {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string | null;
+  facility: string | null;
+  team: { id: string; name: string };
+  _count?: { players: number };
+}
+
+interface Standing {
+  position: number;
+  team: { name: string };
+  points: number;
+  wins: number;
+  losses: number;
+  setsWon: number;
+  setsLost: number;
+}
+
+interface Club {
+  id: string;
+  name: string;
+  city: string;
+}
 
 export default function DashboardPage() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
+
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [trainings, setTrainings] = useState<Training[]>([]);
+  const [standings, setStandings] = useState<Standing[]>([]);
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [selectedClubId, setSelectedClubId] = useState<string>(userClubId || "");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        setLoading(true);
+        console.log("🔍 Dashboard: Iniciando carga de datos...");
+        console.log("👤 Usuario:", session?.user);
+        console.log("🏢 Club ID:", userClubId);
+        console.log("🔑 Rol:", userRole);
+
+        // Si es administrador global, cargar lista de clubs
+        if (userRole === "GLOBAL_ADMIN") {
+          console.log("👑 Modo administrador global detectado");
+          const clubsRes = await fetch("/api/clubs");
+          if (clubsRes.ok) {
+            const clubsData = await clubsRes.json();
+            console.log("📊 Clubs disponibles:", clubsData);
+            setClubs(clubsData);
+            
+            // Si no hay club seleccionado y hay clubs, seleccionar el primero
+            if (!selectedClubId && clubsData.length > 0) {
+              setSelectedClubId(clubsData[0].id);
+            }
+          }
+        }
+
+        // Si no hay clubId para cargar datos específicos, salir
+        if (!selectedClubId) {
+          console.log("⚠️ No hay clubId seleccionado");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch teams
+        const teamsUrl = `/api/teams?clubId=${selectedClubId}&deleted=false`;
+        console.log("📡 Fetching teams from:", teamsUrl);
+        const teamsRes = await fetch(teamsUrl);
+        console.log("✅ Teams response status:", teamsRes.status);
+        if (teamsRes.ok) {
+          const teamsData = await teamsRes.json();
+          console.log("📊 Teams data:", teamsData);
+          setTeams(teamsData);
+        } else {
+          console.error("❌ Error fetching teams:", teamsRes.status, teamsRes.statusText);
+        }
+
+        // Fetch upcoming matches (next 7 days)
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        const matchesUrl = `/api/matches?clubId=${selectedClubId}&status=SCHEDULED&startDate=${today.toISOString()}&endDate=${nextWeek.toISOString()}`;
+        console.log("📡 Fetching matches from:", matchesUrl);
+        const matchesRes = await fetch(matchesUrl);
+        console.log("✅ Matches response status:", matchesRes.status);
+        if (matchesRes.ok) {
+          const matchesData = await matchesRes.json();
+          console.log("📊 Matches data:", matchesData);
+          setMatches(matchesData.slice(0, 5));
+        } else {
+          console.error("❌ Error fetching matches:", matchesRes.status, matchesRes.statusText);
+        }
+
+        // Fetch upcoming trainings (next 7 days)
+        const trainingsUrl = `/api/trainings?clubId=${selectedClubId}&startDate=${today.toISOString()}&endDate=${nextWeek.toISOString()}`;
+        console.log("📡 Fetching trainings from:", trainingsUrl);
+        const trainingsRes = await fetch(trainingsUrl);
+        console.log("✅ Trainings response status:", trainingsRes.status);
+        if (trainingsRes.ok) {
+          const trainingsData = await trainingsRes.json();
+          console.log("📊 Trainings data:", trainingsData);
+          setTrainings(trainingsData.slice(0, 5));
+        } else {
+          console.error("❌ Error fetching trainings:", trainingsRes.status, trainingsRes.statusText);
+        }
+
+        // Fetch standings (first active league for the club)
+        const leaguesUrl = `/api/leagues?clubId=${selectedClubId}`;
+        console.log("📡 Fetching leagues from:", leaguesUrl);
+        const leaguesRes = await fetch(leaguesUrl);
+        console.log("✅ Leagues response status:", leaguesRes.status);
+        if (leaguesRes.ok) {
+          const leaguesData = await leaguesRes.json();
+          console.log("📊 Leagues data:", leaguesData);
+          if (leaguesData.length > 0) {
+            const standingsUrl = `/api/standings?leagueId=${leaguesData[0].id}`;
+            console.log("📡 Fetching standings from:", standingsUrl);
+            const standingsRes = await fetch(standingsUrl);
+            console.log("✅ Standings response status:", standingsRes.status);
+            if (standingsRes.ok) {
+              const standingsData = await standingsRes.json();
+              console.log("📊 Standings data:", standingsData);
+              setStandings(standingsData.slice(0, 8));
+            } else {
+              console.error("❌ Error fetching standings:", standingsRes.status, standingsRes.statusText);
+            }
+          } else {
+            console.log("⚠️ No leagues found for this club");
+          }
+        } else {
+          console.error("❌ Error fetching leagues:", leaguesRes.status, leaguesRes.statusText);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+        console.log("✅ Dashboard: Carga de datos finalizada");
+      }
+    }
+
+    if (session) {
+      fetchData();
+    }
+  }, [session, userClubId, selectedClubId, userRole]);
+
+  // Calculate stats
+  const totalTeams = teams.length;
+  const upcomingTrainings = trainings.length;
+  const upcomingMatches = matches.length;
+
+  // Get user's team for standings highlight
+  const userPlayer = (session?.user as any)?.player;
+  const userTeamId = userPlayer?.teamId;
+  const userTeam = teams.find(t => t.id === userTeamId);
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Cargando...
+            </h1>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map(i => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <div className="h-20 bg-muted animate-pulse rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
         {/* Welcome */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Bienvenido, {session?.user?.name || "Usuario"}
-          </h1>
-          <p className="text-muted-foreground">
-            Panel de control - {getRoleLabel(userRole)}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Bienvenido, {session?.user?.name || "Usuario"}
+              </h1>
+              <p className="text-muted-foreground">
+                Panel de control - {getRoleLabel(userRole)}
+              </p>
+            </div>
+            {userRole === "GLOBAL_ADMIN" && clubs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Select value={selectedClubId} onValueChange={setSelectedClubId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Seleccionar club" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clubs.map(club => (
+                      <SelectItem key={club.id} value={club.id}>
+                        {club.name} - {club.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Equipos"
-            value="6"
-            description="3 masculinos, 2 femeninos, 1 mixto"
+            value={totalTeams.toString()}
+            description={`${teams.filter(t => t.category === "MASCULINO").length} masculinos, ${teams.filter(t => t.category === "FEMENINO").length} femeninos, ${teams.filter(t => t.category === "MIXTO").length} mixtos`}
             icon={Users}
-            trend="+2 este mes"
+            trend={`${teams.reduce((acc, t) => acc + t._count.players, 0)} jugadores totales`}
           />
           <StatCard
             title="Próximos Entrenamientos"
-            value="4"
+            value={upcomingTrainings.toString()}
             description="Esta semana"
             icon={Calendar}
-            trend="Hoy: 18:00"
+            trend={
+              trainings.length > 0
+                ? `Próximo: ${trainings[0].startTime}`
+                : "Sin entrenamientos"
+            }
           />
           <StatCard
             title="Partidos Pendientes"
-            value="2"
-            description="Jornada 8"
+            value={upcomingMatches.toString()}
+            description="Próximos 7 días"
             icon={Swords}
-            trend="Sábado 10:00"
+            trend={
+              matches.length > 0
+                ? `${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name}`
+                : "Sin partidos"
+            }
           />
           <StatCard
             title="Clasificación"
-            value="2º"
-            description="Liga Senior Masculina"
+            value={
+              userTeam
+                ? `${userTeam.name}`
+                : standings.length > 0
+                ? `${standings[0].team.name}`
+                : "N/A"
+            }
+            description={
+              userTeam
+                ? `Posición ${standings.find(s => s.team.name === userTeam.name)?.position || "-"}`
+                : standings.length > 0
+                ? "Liga activa"
+                : "Sin liga activa"
+            }
             icon={Trophy}
-            trend="+1 posición"
+            trend={
+              userTeam
+                ? `${standings.find(s => s.team.name === userTeam.name)?.points || 0} puntos`
+                : standings.length > 0
+                ? `${standings[0].points} puntos (1º)`
+                : "-"
+            }
           />
         </div>
 
@@ -82,32 +333,29 @@ export default function DashboardPage() {
               <CardDescription>Partidos programados</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <MatchItem
-                  homeTeam="Padel Club A"
-                  awayTeam="TC Barcelona"
-                  date="Sáb, 15 Jun"
-                  time="10:00"
-                  court="Pista 1"
-                  status="SCHEDULED"
-                />
-                <MatchItem
-                  homeTeam="Padel Club B"
-                  awayTeam="CD Tennis"
-                  date="Sáb, 15 Jun"
-                  time="12:00"
-                  court="Pista 3"
-                  status="SCHEDULED"
-                />
-                <MatchItem
-                  homeTeam="Padel Club A"
-                  awayTeam="Real Padel"
-                  date="Sáb, 22 Jun"
-                  time="10:00"
-                  court="Pista 2"
-                  status="SCHEDULED"
-                />
-              </div>
+              {matches.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay partidos programados
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {matches.map(match => (
+                    <MatchItem
+                      key={match.id}
+                      homeTeam={match.homeTeam.name}
+                      awayTeam={match.awayTeam.name}
+                      date={new Date(match.matchDate).toLocaleDateString("es-ES", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      time={match.matchTime || "TBD"}
+                      court={match.court || "Por determinar"}
+                      status={match.status}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -121,32 +369,29 @@ export default function DashboardPage() {
               <CardDescription>Entrenamientos programados</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <TrainingItem
-                  title="Entrenamiento Táctico"
-                  date="Hoy"
-                  time="18:00 - 20:00"
-                  facility="Pista Cubierta"
-                  attendees={8}
-                  total={10}
-                />
-                <TrainingItem
-                  title="Sesión de Saque"
-                  date="Mié, 12 Jun"
-                  time="19:00 - 21:00"
-                  facility="Pista 1"
-                  attendees={6}
-                  total={10}
-                />
-                <TrainingItem
-                  title="Partido Amistoso"
-                  date="Vie, 14 Jun"
-                  time="18:00 - 20:00"
-                  facility="Pista 2"
-                  attendees={10}
-                  total={10}
-                />
-              </div>
+              {trainings.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay entrenamientos programados
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {trainings.map(training => (
+                    <TrainingItem
+                      key={training.id}
+                      title={training.title}
+                      date={new Date(training.date).toLocaleDateString("es-ES", {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      time={`${training.startTime}${training.endTime ? ` - ${training.endTime}` : ""}`}
+                      facility={training.facility || "Por determinar"}
+                      attendees={training._count?.players || 0}
+                      total={teams.find(t => t.id === training.team.id)?._count.players || 10}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -157,19 +402,31 @@ export default function DashboardPage() {
                 <Trophy className="h-5 w-5 text-primary" />
                 Clasificación
               </CardTitle>
-              <CardDescription>Liga Senior Masculina</CardDescription>
+              <CardDescription>
+                {standings.length > 0 ? "Liga activa" : "Sin liga activa"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <StandingRow position={1} team="TC Barcelona" points={24} wins={8} losses={2} sets="+12" />
-                <StandingRow position={2} team="Padel Club A" points={21} wins={7} losses={3} sets="+8" highlight />
-                <StandingRow position={3} team="Real Padel" points={18} wins={6} losses={4} sets="+5" />
-                <StandingRow position={4} team="CD Tennis" points={15} wins={5} losses={5} sets="+1" />
-                <StandingRow position={5} team="Padel Club B" points={12} wins={4} losses={6} sets="-3" />
-                <StandingRow position={6} team="ATM Padel" points={9} wins={3} losses={7} sets="-8" />
-                <StandingRow position={7} team="Club Natación" points={6} wins={2} losses={8} sets="-12" />
-                <StandingRow position={8} team="Uni Padel" points={3} wins={1} losses={9} sets="-15" />
-              </div>
+              {standings.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay clasificación disponible
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {standings.map(standing => (
+                    <StandingRow
+                      key={standing.team.name}
+                      position={standing.position}
+                      team={standing.team.name}
+                      points={standing.points}
+                      wins={standing.wins}
+                      losses={standing.losses}
+                      sets={`+${standing.setsWon - standing.setsLost}`}
+                      highlight={userTeam?.name === standing.team.name}
+                    />
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -184,31 +441,27 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <ActivityItem
-                  type="result"
-                  text="Resultado registrado: Padel Club A 3 - 0 CD Tennis"
-                  time="Hace 2 horas"
-                />
-                <ActivityItem
-                  type="convocation"
-                  text="Convocatoria enviada para jornada 8"
-                  time="Hace 5 horas"
-                />
-                <ActivityItem
-                  type="training"
-                  text="Asistencia registrada: Entrenamiento Táctico"
-                  time="Ayer"
-                />
-                <ActivityItem
-                  type="result"
-                  text="Resultado registrado: Padel Club B 2 - 1 ATM Padel"
-                  time="Ayer"
-                />
-                <ActivityItem
-                  type="general"
-                  text="Nuevo jugador añadido: Carlos López"
-                  time="Hace 2 días"
-                />
+                {matches.slice(0, 2).map(match => (
+                  <ActivityItem
+                    key={match.id}
+                    type="result"
+                    text={`Partido programado: ${match.homeTeam.name} vs ${match.awayTeam.name}`}
+                    time={new Date(match.matchDate).toLocaleDateString("es-ES")}
+                  />
+                ))}
+                {trainings.slice(0, 2).map(training => (
+                  <ActivityItem
+                    key={training.id}
+                    type="training"
+                    text={`Entrenamiento: ${training.title}`}
+                    time={new Date(training.date).toLocaleDateString("es-ES")}
+                  />
+                ))}
+                {matches.length === 0 && trainings.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Sin actividad reciente
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -314,7 +567,7 @@ function TrainingItem({
   attendees: number;
   total: number;
 }) {
-  const percentage = Math.round((attendees / total) * 100);
+  const percentage = total > 0 ? Math.round((attendees / total) * 100) : 0;
   return (
     <div className="rounded-lg border p-3">
       <div className="flex items-center justify-between">

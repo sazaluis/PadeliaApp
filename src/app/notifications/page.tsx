@@ -1,10 +1,13 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Bell, Check, CheckCheck, Calendar, ClipboardList, Trophy, Settings } from "lucide-react";
+import { Bell, Check, CheckCheck, Calendar, ClipboardList, Trophy, Settings, Building2 } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -16,6 +19,13 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
+  
+  const [clubs, setClubs] = useState<{id: string; name: string; city: string}[]>([]);
+  const [selectedClubId, setSelectedClubId] = useState<string>(userClubId || "");
+  
   const notifications: Notification[] = [
     { id: "1", type: "CONVOCATION", title: "Convocatoria para Jornada 8", message: "Se ha abierto la convocatoria para el partido del sábado. Confirma tu asistencia.", isRead: false, createdAt: "2024-09-25T10:00:00" },
     { id: "2", type: "TRAINING", title: "Entrenamiento Táctico - Hoy", message: "Recuerda: entrenamiento hoy a las 18:00 en Pista Cubierta.", isRead: false, createdAt: "2024-09-25T08:00:00" },
@@ -46,6 +56,20 @@ export default function NotificationsPage() {
     return `Hace ${Math.floor(diffHours / 24)} días`;
   };
 
+  useEffect(() => {
+    if (userRole === "GLOBAL_ADMIN") {
+      fetch("/api/clubs")
+        .then(r => r.json())
+        .then(data => {
+          setClubs(Array.isArray(data) ? data : []);
+          if (!selectedClubId && data.length > 0) {
+            setSelectedClubId(data[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userRole]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
@@ -54,10 +78,29 @@ export default function NotificationsPage() {
             <h1 className="text-3xl font-bold tracking-tight">Notificaciones</h1>
             <p className="text-muted-foreground">Centro de notificaciones</p>
           </div>
-          <Button variant="outline" size="sm">
-            <CheckCheck className="mr-2 h-4 w-4" />
-            Marcar todas como leídas
-          </Button>
+          <div className="flex items-center gap-2">
+            {userRole === "GLOBAL_ADMIN" && clubs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Select value={selectedClubId} onValueChange={setSelectedClubId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Seleccionar club" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clubs.map(club => (
+                      <SelectItem key={club.id} value={club.id}>
+                        {club.name} - {club.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <Button variant="outline" size="sm">
+              <CheckCheck className="mr-2 h-4 w-4" />
+              Marcar todas como leídas
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-2">

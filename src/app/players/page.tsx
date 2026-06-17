@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,7 @@ interface Player {
   user: { id: string; name: string; surname: string; email: string; phone?: string; image?: string };
   team?: { id: string; name: string; category: string }; club: { id: string; name: string };
 }
-interface Club { id: string; name: string; }
+interface Club { id: string; name: string; city: string; }
 interface Team { id: string; name: string; category: string; level?: string; }
 
 function filterTeamsForPlayer(teams: Team[], gender: string, playerLevel: string | undefined | null): Team[] {
@@ -31,14 +32,18 @@ function filterTeamsForPlayer(teams: Team[], gender: string, playerLevel: string
 }
 
 export default function PlayersPage() {
+  const { data: session } = useSession();
   const searchParams = useSearchParams(); const router = useRouter();
+  const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
   const clubIdFilter = searchParams.get("clubId");
-
+  
   const [players, setPlayers] = useState<Player[]>([]);
   const [deletedPlayers, setDeletedPlayers] = useState<Player[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedClubId, setSelectedClubId] = useState<string>(clubIdFilter || userClubId || "");
   const [search, setSearch] = useState("");
   const [filterClub, setFilterClub] = useState("ALL");
   const [filterGender, setFilterGender] = useState("ALL");
@@ -61,16 +66,30 @@ export default function PlayersPage() {
   const [groupByTeam, setGroupByTeam] = useState(false);
 
   useEffect(() => {
-    const base = clubIdFilter ? `/api/players?clubId=${clubIdFilter}` : "/api/players";
-    const deletedBase = clubIdFilter ? `/api/players?clubId=${clubIdFilter}&deleted=true` : "/api/players?deleted=true";
+    if (userRole === "GLOBAL_ADMIN") {
+      fetch("/api/clubs")
+        .then(r => r.json())
+        .then(data => {
+          setClubs(Array.isArray(data) ? data : []);
+          if (!selectedClubId && data.length > 0) {
+            setSelectedClubId(data[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userRole]);
+
+  useEffect(() => {
+    const base = selectedClubId ? `/api/players?clubId=${selectedClubId}` : "/api/players";
+    const deletedBase = selectedClubId ? `/api/players?clubId=${selectedClubId}&deleted=true` : "/api/players?deleted=true";
     Promise.all([fetch(base).then(r => r.json()), fetch(deletedBase).then(r => r.json())])
       .then(([active, deleted]) => { setPlayers(Array.isArray(active) ? active : []); setDeletedPlayers(Array.isArray(deleted) ? deleted : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [clubIdFilter]);
+  }, [selectedClubId]);
 
   useEffect(() => { fetch("/api/clubs").then(r => r.json()).then(d => setClubs(Array.isArray(d) ? d : [])).catch(() => {}); }, []);
 
-  const filteredClub = clubIdFilter ? clubs.find(c => c.id === clubIdFilter) : null;
+  const filteredClub = selectedClubId ? clubs.find(c => c.id === selectedClubId) : null;
 
   const applyFilters = (list: Player[]) => {
     return list.filter(p => {
@@ -163,9 +182,26 @@ export default function PlayersPage() {
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div><div className="flex items-center gap-3">
-            {clubIdFilter && <Button variant="ghost" size="icon" onClick={() => router.push("/clubs")}><ArrowLeft className="h-5 w-5" /></Button>}
+            {selectedClubId && userRole !== "GLOBAL_ADMIN" && <Button variant="ghost" size="icon" onClick={() => router.push("/clubs")}><ArrowLeft className="h-5 w-5" /></Button>}
             <div><h1 className="text-3xl font-bold tracking-tight">Jugadores</h1><p className="text-muted-foreground">{filteredClub ? `Jugadores de ${filteredClub.name}` : "Gestión de jugadores"}</p></div>
           </div></div>
+          {userRole === "GLOBAL_ADMIN" && clubs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedClubId} onValueChange={setSelectedClubId}>
+                <SelectTrigger className="w-[250px]">
+                  <SelectValue placeholder="Seleccionar club" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clubs.map(club => (
+                    <SelectItem key={club.id} value={club.id}>
+                      {club.name} - {club.city}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Dialog open={showForm} onOpenChange={setShowForm}>
             <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nuevo Jugador</Button></DialogTrigger>
             <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">

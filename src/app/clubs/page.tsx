@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Plus, MapPin, Phone, Mail, Users, Search, Trash2, RotateCcw, UserCheck, AlertTriangle, Pencil, Globe } from "lucide-react";
+import { toast } from "sonner";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 const DAY_LABELS: Record<string, string> = {
@@ -41,6 +42,7 @@ interface Club {
   schedule?: string;
   _count: { teams: number; players: number; coaches: number };
   manager?: { id: string; name?: string; surname?: string };
+  responsable?: string;
   website?: string;
   description?: string;
 }
@@ -102,9 +104,10 @@ export default function ClubsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", city: "", address: "", phone: "", email: "", description: "", manager: "", website: "" });
-  const [formCourts, setFormCourts] = useState(0);
+  const [form, setForm] = useState({ name: "", city: "", address: "", phone: "", email: "", description: "", responsable: "", website: "" });
+  const [formCourts, setFormCourts] = useState(1);
   const [formSchedule, setFormSchedule] = useState(emptySchedule());
+  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
 
   const [deletingClub, setDeletingClub] = useState<Club | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -122,10 +125,11 @@ export default function ClubsPage() {
   const [editingClub, setEditingClub] = useState<Club | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editForm, setEditForm] = useState({
-    name: "", city: "", address: "", phone: "", email: "", website: "", description: "", managerId: ""
+    name: "", city: "", address: "", phone: "", email: "", website: "", description: "", responsable: ""
   });
-  const [editCourts, setEditCourts] = useState(0);
+  const [editCourts, setEditCourts] = useState(1);
   const [editSchedule, setEditSchedule] = useState(emptySchedule());
+  const [editFormErrors, setEditFormErrors] = useState<Record<string, boolean>>({});
 
   const fetchData = () => {
     setLoading(true);
@@ -155,8 +159,63 @@ export default function ClubsPage() {
     (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.city.toLowerCase().includes(search.toLowerCase())
   );
 
+  const fieldErrorClass = (hasError: boolean) =>
+    hasError ? "border-destructive focus-visible:ring-destructive" : "";
+
+  const FieldError = ({ show }: { show: boolean }) =>
+    show ? <p className="text-xs text-destructive mt-1">Completa este campo</p> : null;
+
+  const scrollToFirstError = (errors: Record<string, boolean>) => {
+    const fieldOrder = ["name", "city", "responsable", "address", "phone", "email"];
+    for (const field of fieldOrder) {
+      if (errors[field]) {
+        const el = document.getElementById(`create-${field}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+        break;
+      }
+    }
+  };
+
+  const scrollToFirstEditError = (errors: Record<string, boolean>) => {
+    const fieldOrder = ["name", "city", "responsable", "address", "phone", "email"];
+    for (const field of fieldOrder) {
+      if (errors[field]) {
+        const el = document.getElementById(`edit-${field}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus();
+        }
+        break;
+      }
+    }
+  };
+
+  const validateCreateFields = (): Record<string, boolean> => {
+    const errors: Record<string, boolean> = {};
+    if (!form.name.trim()) errors.name = true;
+    if (!form.city.trim()) errors.city = true;
+    if (!form.responsable.trim()) errors.responsable = true;
+    if (!form.address.trim()) errors.address = true;
+    if (!form.phone.trim()) errors.phone = true;
+    if (!form.email.trim()) errors.email = true;
+    return errors;
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const errors = validateCreateFields();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      scrollToFirstError(errors);
+      return;
+    }
+
+    setFormErrors({});
+
     const scheduleStr = JSON.stringify(formSchedule);
     const res = await fetch("/api/clubs", {
       method: "POST",
@@ -167,9 +226,14 @@ export default function ClubsPage() {
       const club = await res.json();
       setClubs([...clubs, { ...club, _count: { teams: 0, players: 0, coaches: 0 } }]);
       setShowForm(false);
-      setForm({ name: "", city: "", address: "", phone: "", email: "", description: "", manager: "", website: "" });
-      setFormCourts(0);
+      setForm({ name: "", city: "", address: "", phone: "", email: "", description: "", responsable: "", website: "" });
+      setFormCourts(1);
       setFormSchedule(emptySchedule());
+      setFormErrors({});
+      toast.success("Club creado correctamente");
+    } else {
+      const err = await res.json();
+      toast.error(err.error || "Error al crear el club");
     }
   };
 
@@ -224,23 +288,41 @@ const openEditClub = async (club: Club) => {
       email: club.email || "",
       website: club.website || "",
       description: club.description || "",
-      managerId: club.manager ? `${club.manager.name || ""} ${club.manager.surname || ""}`.trim() : ""
+      responsable: club.responsable || ""
     });
     setEditCourts(club.courts);
     setEditSchedule(parseSchedule(club.schedule));
     setShowEditDialog(true);
   };
 
+  const validateEditFields = (): Record<string, boolean> => {
+    const errors: Record<string, boolean> = {};
+    if (!editForm.name.trim()) errors.name = true;
+    if (!editForm.city.trim()) errors.city = true;
+    if (!editForm.responsable.trim()) errors.responsable = true;
+    if (!editForm.address.trim()) errors.address = true;
+    if (!editForm.phone.trim()) errors.phone = true;
+    if (!editForm.email.trim()) errors.email = true;
+    return errors;
+  };
+
   const handleUpdateClub = async () => {
     if (!editingClub) return;
-    const managerId = editForm.managerId === "-" ? null : editForm.managerId || null;
+
+    const errors = validateEditFields();
+    if (Object.keys(errors).length > 0) {
+      setEditFormErrors(errors);
+      scrollToFirstEditError(errors);
+      return;
+    }
+
+    setEditFormErrors({});
     const scheduleStr = JSON.stringify(editSchedule);
     const res = await fetch(`/api/clubs/${editingClub.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...editForm,
-        managerId,
         courts: editCourts,
         schedule: scheduleStr,
         phone: editForm.phone || null,
@@ -250,13 +332,12 @@ const openEditClub = async (club: Club) => {
       })
     });
     if (res.ok) {
-      const updated = await res.json();
-      setClubs(clubs.map(c => c.id === editingClub.id ? updated : c));
       setShowEditDialog(false);
       setEditingClub(null);
+      fetchData();
     } else {
       const err = await res.json();
-      alert(err.error || "Error al actualizar el club");
+      toast.error(err.error || "Error al actualizar el club");
     }
   };
 
@@ -354,24 +435,42 @@ const openEditClub = async (club: Club) => {
             <CardHeader><CardTitle>Crear Nuevo Club</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={handleCreate} className="grid gap-4 md:grid-cols-2">
-                <Input placeholder="Nombre del club" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-                <Input placeholder="Ciudad" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} required />
-                <Input placeholder="Responsable" value={form.manager} onChange={(e) => setForm({ ...form, manager: e.target.value })} />
-                <Input placeholder="Dirección" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-                <Input placeholder="Teléfono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-                <Input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                <div>
+                  <Input id="create-name" placeholder="Nombre del club *" value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); if (formErrors.name) setFormErrors(prev => { const n = { ...prev }; delete n.name; return n; }); }} className={fieldErrorClass(formErrors.name)} />
+                  <FieldError show={!!formErrors.name} />
+                </div>
+                <div>
+                  <Input id="create-city" placeholder="Ciudad *" value={form.city} onChange={(e) => { setForm({ ...form, city: e.target.value }); if (formErrors.city) setFormErrors(prev => { const n = { ...prev }; delete n.city; return n; }); }} className={fieldErrorClass(formErrors.city)} />
+                  <FieldError show={!!formErrors.city} />
+                </div>
+                <div>
+                  <Input id="create-responsable" placeholder="Responsable *" value={form.responsable} onChange={(e) => { setForm({ ...form, responsable: e.target.value }); if (formErrors.responsable) setFormErrors(prev => { const n = { ...prev }; delete n.responsable; return n; }); }} className={fieldErrorClass(formErrors.responsable)} />
+                  <FieldError show={!!formErrors.responsable} />
+                </div>
+                <div>
+                  <Input id="create-address" placeholder="Dirección *" value={form.address} onChange={(e) => { setForm({ ...form, address: e.target.value }); if (formErrors.address) setFormErrors(prev => { const n = { ...prev }; delete n.address; return n; }); }} className={fieldErrorClass(formErrors.address)} />
+                  <FieldError show={!!formErrors.address} />
+                </div>
+                <div>
+                  <Input id="create-phone" placeholder="Teléfono *" value={form.phone} onChange={(e) => { setForm({ ...form, phone: e.target.value }); if (formErrors.phone) setFormErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }} className={fieldErrorClass(formErrors.phone)} />
+                  <FieldError show={!!formErrors.phone} />
+                </div>
+                <div>
+                  <Input id="create-email" placeholder="Email *" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); if (formErrors.email) setFormErrors(prev => { const n = { ...prev }; delete n.email; return n; }); }} className={fieldErrorClass(formErrors.email)} />
+                  <FieldError show={!!formErrors.email} />
+                </div>
                 <Input placeholder="Web" value={form.website || ""} onChange={(e) => setForm({ ...form, website: e.target.value })} onFocus={(e) => { if (!form.website) setForm({ ...form, website: "https://" }); }} />
                 <Input placeholder="Descripción" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                 <div>
-                  <label className="text-sm font-medium">Nº de pistas</label>
-                  <Input type="number" min={0} value={formCourts} onChange={(e) => setFormCourts(parseInt(e.target.value) || 0)} required />
+                  <label className="text-sm font-medium">Nº de pistas *</label>
+                  <Input type="number" min={1} value={formCourts} onChange={(e) => setFormCourts(parseInt(e.target.value) || 1)} required />
                 </div>
                 <div />
                 <div className="md:col-span-2">
                   <ScheduleInputs schedule={formSchedule} onChange={setFormSchedule} />
                 </div>
                 <div className="md:col-span-2 flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
+                  <Button type="button" variant="outline" onClick={() => { setShowForm(false); setFormErrors({}); }}>Cancelar</Button>
                   <Button type="submit">Crear Club</Button>
                 </div>
               </form>
@@ -434,7 +533,7 @@ const openEditClub = async (club: Club) => {
                         <Users className="h-4 w-4 text-primary" /><span><strong>{club._count?.players ?? 0}</strong> jugadores</span>
                       </button>
                     </div>
-                    {club.manager && <div className="pt-2 border-t mt-2"><span className="text-xs text-muted-foreground">Responsable: {club.manager.name} {club.manager.surname}</span></div>}
+                    {club.responsable && <div className="pt-2 border-t mt-2"><span className="text-xs text-muted-foreground">Responsable: {club.responsable}</span></div>}
                   </CardContent>
                 </Card>
               ))}
@@ -573,20 +672,47 @@ const openEditClub = async (club: Club) => {
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Club</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div><label className="text-sm font-medium">Nombre</label><Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></div>
-            <div><label className="text-sm font-medium">Ciudad</label><Input value={editForm.city} onChange={e => setEditForm({ ...editForm, city: e.target.value })} /></div>
-            <div><label className="text-sm font-medium">Responsable</label><Input value={editForm.managerId} onChange={e => setEditForm({ ...editForm, managerId: e.target.value })} placeholder="Nombre del responsable" /></div>
-            <div><label className="text-sm font-medium">Dirección</label><Input value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} /></div>
-            <div><label className="text-sm font-medium">Teléfono</label><Input value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} /></div>
-            <div><label className="text-sm font-medium">Email</label><Input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} /></div>
+            <div>
+              <label className="text-sm font-medium">Nombre *</label>
+              <Input id="edit-name" value={editForm.name} onChange={e => { setEditForm({ ...editForm, name: e.target.value }); if (editFormErrors.name) setEditFormErrors(prev => { const n = { ...prev }; delete n.name; return n; }); }} className={fieldErrorClass(editFormErrors.name)} />
+              <FieldError show={!!editFormErrors.name} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Ciudad *</label>
+              <Input id="edit-city" value={editForm.city} onChange={e => { setEditForm({ ...editForm, city: e.target.value }); if (editFormErrors.city) setEditFormErrors(prev => { const n = { ...prev }; delete n.city; return n; }); }} className={fieldErrorClass(editFormErrors.city)} />
+              <FieldError show={!!editFormErrors.city} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Responsable *</label>
+              <Input id="edit-responsable" value={editForm.responsable} onChange={e => { setEditForm({ ...editForm, responsable: e.target.value }); if (editFormErrors.responsable) setEditFormErrors(prev => { const n = { ...prev }; delete n.responsable; return n; }); }} placeholder="Nombre del responsable" className={fieldErrorClass(editFormErrors.responsable)} />
+              <FieldError show={!!editFormErrors.responsable} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Dirección *</label>
+              <Input id="edit-address" value={editForm.address} onChange={e => { setEditForm({ ...editForm, address: e.target.value }); if (editFormErrors.address) setEditFormErrors(prev => { const n = { ...prev }; delete n.address; return n; }); }} className={fieldErrorClass(editFormErrors.address)} />
+              <FieldError show={!!editFormErrors.address} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Teléfono *</label>
+              <Input id="edit-phone" value={editForm.phone} onChange={e => { setEditForm({ ...editForm, phone: e.target.value }); if (editFormErrors.phone) setEditFormErrors(prev => { const n = { ...prev }; delete n.phone; return n; }); }} className={fieldErrorClass(editFormErrors.phone)} />
+              <FieldError show={!!editFormErrors.phone} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Email *</label>
+              <Input id="edit-email" type="email" value={editForm.email} onChange={e => { setEditForm({ ...editForm, email: e.target.value }); if (editFormErrors.email) setEditFormErrors(prev => { const n = { ...prev }; delete n.email; return n; }); }} className={fieldErrorClass(editFormErrors.email)} />
+              <FieldError show={!!editFormErrors.email} />
+            </div>
             <div><label className="text-sm font-medium">Web</label><Input value={editForm.website ?? ""} onChange={e => setEditForm({ ...editForm, website: e.target.value })} onFocus={e => { if (!editForm.website) setEditForm({ ...editForm, website: "https://" }); }} /></div>
             <div><label className="text-sm font-medium">Descripción</label><Input value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} /></div>
             <div>
-              <label className="text-sm font-medium">Nº de pistas</label>
-              <Input type="number" min={0} value={editCourts} onChange={(e) => setEditCourts(parseInt(e.target.value) || 0)} />
+              <label className="text-sm font-medium">Nº de pistas *</label>
+              <Input type="number" min={1} value={editCourts} onChange={(e) => setEditCourts(parseInt(e.target.value) || 1)} />
             </div>
             <ScheduleInputs schedule={editSchedule} onChange={setEditSchedule} />
-            <div className="flex justify-end gap-2 pt-2"><Button variant="outline" onClick={() => setShowEditDialog(false)}>Cancelar</Button><Button onClick={handleUpdateClub}>Guardar</Button></div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditFormErrors({}); }}>Cancelar</Button>
+              <Button onClick={handleUpdateClub}>Guardar</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

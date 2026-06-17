@@ -57,11 +57,27 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { name, city, address, phone, email, website, description, courts, schedule } = body;
+    const { name, city, address, phone, email, website, description, responsable, courts, schedule } = body;
 
-    if (!name || !city) {
+    const missing: string[] = [];
+    if (!name?.trim()) missing.push("Nombre del club");
+    if (!city?.trim()) missing.push("Ciudad");
+    if (!responsable?.trim()) missing.push("Responsable");
+    if (!address?.trim()) missing.push("Dirección");
+    if (!phone?.trim()) missing.push("Teléfono");
+    if (!email?.trim()) missing.push("Email");
+
+    if (missing.length > 0) {
       return NextResponse.json(
-        { error: "Nombre y ciudad son obligatorios" },
+        { error: `Faltan por rellenar los siguientes campos obligatorios: ${missing.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
+    const courtsNum = courts !== undefined ? parseInt(courts) : 1;
+    if (isNaN(courtsNum) || courtsNum < 1) {
+      return NextResponse.json(
+        { error: "Un club debe tener al menos 1 pista" },
         { status: 400 }
       );
     }
@@ -89,7 +105,8 @@ export async function POST(req: Request) {
         email,
         website,
         description,
-        courts: courts !== undefined ? parseInt(courts) : 0,
+        responsable: responsable || null,
+        courts: courtsNum,
         schedule: schedule || null,
       },
     });

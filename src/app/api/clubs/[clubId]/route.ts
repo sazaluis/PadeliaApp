@@ -102,7 +102,7 @@ export async function PATCH(
     const { restore, reassignPlayers, playerAssignments, managerId, ...rest } = body;
 
     if (!restore) {
-      const { name, city, address, phone, email, website, description, courts, schedule } = rest;
+      const { name, city, address, phone, email, website, description, responsable, courts, schedule } = rest;
       const data: any = {};
       if (name !== undefined) data.name = name;
       if (city !== undefined) data.city = city;
@@ -111,7 +111,17 @@ export async function PATCH(
       if (email !== undefined) data.email = email;
       if (website !== undefined) data.website = website;
       if (description !== undefined) data.description = description;
-      if (courts !== undefined) data.courts = parseInt(courts);
+      if (responsable !== undefined) data.responsable = responsable || null;
+      if (courts !== undefined) {
+        const courtsNum = parseInt(courts);
+        if (isNaN(courtsNum) || courtsNum < 1) {
+          return NextResponse.json(
+            { error: "Un club debe tener al menos 1 pista" },
+            { status: 400 }
+          );
+        }
+        data.courts = courtsNum;
+      }
       if (schedule !== undefined) data.schedule = schedule;
 
       const updated = await prismadb.club.update({
@@ -120,10 +130,19 @@ export async function PATCH(
       });
 
       // Update manager assignment if provided
-      if (managerId !== undefined && managerId !== null) {
-        const manager = await prismadb.user.findUnique({ where: { id: managerId } });
-        if (manager && manager.role === "CLUB_MANAGER") {
-          await prismadb.user.update({ where: { id: managerId }, data: { clubId: params.clubId } });
+      if (managerId !== undefined) {
+        // First, unlink any existing manager from this club
+        await prismadb.user.updateMany({
+          where: { role: "CLUB_MANAGER", clubId: params.clubId },
+          data: { clubId: null },
+        });
+
+        // If a new manager is provided, link them to this club
+        if (managerId !== null) {
+          const manager = await prismadb.user.findUnique({ where: { id: managerId } });
+          if (manager && manager.role === "CLUB_MANAGER") {
+            await prismadb.user.update({ where: { id: managerId }, data: { clubId: params.clubId } });
+          }
         }
       }
 
