@@ -20,7 +20,7 @@ import {
   ChevronRight,
   Swords,
 } from "lucide-react";
-import { useState } from "react";
+import { useSidebar } from "./sidebar-context";
 
 interface NavItem {
   label: string;
@@ -94,7 +94,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggle } = useSidebar();
 
   const userRole = (session?.user as any)?.role;
 
@@ -121,7 +121,7 @@ export function Sidebar() {
           </Link>
         )}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggle}
           className="rounded-md p-1 hover:bg-muted"
         >
           {collapsed ? (

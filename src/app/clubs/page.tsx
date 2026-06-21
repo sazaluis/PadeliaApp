@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -97,11 +98,16 @@ function parseSchedule(scheduleStr: string | undefined | null): WeekSchedule {
 }
 
 export default function ClubsPage() {
+  const { data: session } = useSession();
   const router = useRouter();
+  const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
+  
   const [clubs, setClubs] = useState<Club[]>([]);
   const [deletedClubs, setDeletedClubs] = useState<Club[]>([]);
   const [orphanedPlayersCount, setOrphanedPlayersCount] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [selectedClubId, setSelectedClubId] = useState<string>(userClubId || "");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", city: "", address: "", phone: "", email: "", description: "", responsable: "", website: "" });
@@ -131,6 +137,32 @@ export default function ClubsPage() {
   const [editSchedule, setEditSchedule] = useState(emptySchedule());
   const [editFormErrors, setEditFormErrors] = useState<Record<string, boolean>>({});
 
+  const filteredClubs = selectedClubId ? clubs.filter(c => c.id === selectedClubId) : clubs;
+
+  useEffect(() => {
+    if (userRole === "GLOBAL_ADMIN") {
+      fetch("/api/clubs")
+        .then(r => r.json())
+        .then(data => {
+          setClubs(Array.isArray(data) ? data : []);
+          if (!selectedClubId && data.length > 0) {
+            setSelectedClubId(data[0].id);
+          }
+        })
+        .catch(() => {});
+    } else if (userClubId) {
+      // Para usuarios no admin, cargar solo su club
+      fetch(`/api/clubs/${userClubId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.id) {
+            setClubs([data]);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [userRole, userClubId]);
+
   const fetchData = () => {
     setLoading(true);
     Promise.all([
@@ -152,7 +184,7 @@ export default function ClubsPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const filtered = clubs.filter(
+  const filtered = filteredClubs.filter(
     (c) => c.name.toLowerCase().includes(search.toLowerCase()) || c.city.toLowerCase().includes(search.toLowerCase())
   );
   const filteredDeleted = deletedClubs.filter(
@@ -422,7 +454,26 @@ const openEditClub = async (club: Club) => {
             <h1 className="text-3xl font-bold tracking-tight">Clubes</h1>
             <p className="text-muted-foreground">Gestión de clubes de pádel</p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)}><Plus className="mr-2 h-4 w-4" />Nuevo Club</Button>
+          <div className="flex items-center gap-2">
+            {userRole === "GLOBAL_ADMIN" && clubs.length > 1 && (
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Select value={selectedClubId} onValueChange={setSelectedClubId}>
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue placeholder="Seleccionar club" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clubs.map(club => (
+                      <SelectItem key={club.id} value={club.id}>
+                        {club.name} - {club.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <Button onClick={() => setShowForm(!showForm)}><Plus className="mr-2 h-4 w-4" />Nuevo Club</Button>
+          </div>
         </div>
 
         <div className="relative max-w-md">

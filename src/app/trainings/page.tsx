@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,7 +52,7 @@ interface Coach {
 }
 interface Training {
   id: string; title: string; date: string; startTime: string; endTime: string | null;
-  court: string | null; notes: string | null;
+  court: string[] | null; notes: string | null;
   team: { id: string; name: string; category: string };
   coach: { id: string; user: { name: string; surname: string } } | null;
 }
@@ -96,6 +98,9 @@ function getCourtList(club: Club | null): string[] {
 
 export default function TrainingsPage() {
   const router = useRouter();
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role;
+  const userClubId = (session?.user as any)?.clubId;
 
   // Club selection
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -120,7 +125,7 @@ export default function TrainingsPage() {
     date: format(new Date(), "yyyy-MM-dd"),
     startTime: "10:00",
     endTime: "11:30",
-    court: "",
+    courts: [] as string[],
     teamId: "",
     coachId: "",
     notes: "",
@@ -129,12 +134,13 @@ export default function TrainingsPage() {
   // Edit training
   const [editingTraining, setEditingTraining] = useState<Training | null>(null);
   const [editFormData, setEditFormData] = useState({
-    date: "", startTime: "", endTime: "", court: "", teamId: "", coachId: "", notes: "",
+    date: "", startTime: "", endTime: "", courts: [] as string[], teamId: "", coachId: "", notes: "",
   });
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [recentlyDeleted, setRecentlyDeleted] = useState<{id: string, title: string} | null>(null);
 
   // Templates
   const [templates, setTemplates] = useState<TrainingTemplate[]>([]);
@@ -166,11 +172,16 @@ export default function TrainingsPage() {
       const active = Array.isArray(data) ? data : [];
       setClubs(active);
       setLoadingClubs(false);
-      if (active.length === 1) {
+      
+      // Para admin, seleccionar automáticamente el primer club
+      if (userRole === "GLOBAL_ADMIN" && active.length > 0) {
+        setSelectedClub(active[0]);
+      } else if (active.length === 1) {
+        // Para usuarios no admin, seleccionar automáticamente si solo hay uno
         setSelectedClub(active[0]);
       }
     }).catch(() => setLoadingClubs(false));
-  }, []);
+  }, [userRole]);
 
   // ── Load teams & coaches when club changes ──
   useEffect(() => {
@@ -234,7 +245,7 @@ export default function TrainingsPage() {
       });
       if (!res.ok) throw new Error();
       setShowSheet(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), startTime: "10:00", endTime: "11:30", court: "", teamId: "", coachId: "", notes: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), startTime: "10:00", endTime: "11:30", courts: [], teamId: "", coachId: "", notes: "" });
       fetchTrainings();
     } catch {
       alert("Error al crear la sesión");
@@ -249,7 +260,7 @@ export default function TrainingsPage() {
       date: format(new Date(training.date), "yyyy-MM-dd"),
       startTime: training.startTime,
       endTime: training.endTime || "11:00",
-      court: training.court || "",
+      courts: training.court || [],
       teamId: training.team.id,
       coachId: training.coach?.id || "",
       notes: training.notes || "",
@@ -281,12 +292,36 @@ export default function TrainingsPage() {
     try {
       const res = await fetch(`/api/trainings/${deleteId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
+
+      const training = trainings.find(t => t.id === deleteId);
+      setRecentlyDeleted({ id: deleteId, title: training?.title || "" });
+      setTrainings(prev => prev.filter(t => t.id !== deleteId));
       setDeleteId(null);
-      fetchTrainings();
+
+      // Auto-eliminar notificación después de 5 minutos
+      setTimeout(() => {
+        setRecentlyDeleted(prev => prev?.id === deleteId ? null : prev);
+      }, 5 * 60 * 1000);
     } catch {
       alert("Error al eliminar la sesión");
     }
     setDeleting(false);
+  };
+
+  const handleRestore = async () => {
+    if (!recentlyDeleted) return;
+    try {
+      const res = await fetch(`/api/trainings/${recentlyDeleted.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      });
+      if (!res.ok) throw new Error();
+      setRecentlyDeleted(null);
+      fetchTrainings();
+    } catch {
+      alert("Error al restaurar la sesión");
+    }
   };
 
   // ── Template handlers ──
@@ -387,23 +422,12 @@ export default function TrainingsPage() {
     );
   }
 
+  // Si no hay club seleccionado después de cargar, mostrar mensaje
   if (!selectedClub) {
     return (
       <DashboardLayout>
         <div className="space-y-6 animate-fade-in">
-          <div><h1 className="text-3xl font-bold tracking-tight">Entrenamientos</h1><p className="text-muted-foreground">Selecciona un club para gestionar sus entrenamientos</p></div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {clubs.map(club => (
-              <Card key={club.id} className="transition-shadow hover:shadow-md cursor-pointer" onClick={() => setSelectedClub(club)}>
-                <CardContent className="py-6">
-                  <div className="flex items-center gap-3">
-                    <Building2 className="h-8 w-8 text-primary" />
-                    <div><h3 className="font-semibold text-lg">{club.name}</h3><p className="text-sm text-muted-foreground">{club.city}</p></div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <div><h1 className="text-3xl font-bold tracking-tight">Entrenamientos</h1><p className="text-muted-foreground">Cargando...</p></div>
         </div>
       </DashboardLayout>
     );
@@ -429,41 +453,60 @@ export default function TrainingsPage() {
 
   const courtOptions = getCourtList(selectedClub);
 
-  const TrainingCard = ({ training }: { training: Training }) => (
-    <div className="relative group">
-      <div
-        className="rounded-lg border bg-card p-2.5 cursor-pointer transition-shadow hover:shadow-sm"
-        style={{ borderLeft: `3px solid ${getTeamColor(training.team.id)}` }}
-      >
-        <div className="flex items-start justify-between gap-1">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1">
-              <Clock className="h-3 w-3" />
-              <span>{training.startTime}{training.endTime ? ` - ${training.endTime}` : ""}</span>
+  const TrainingCard = ({ training }: { training: Training }) => {
+    const [menuOpen, setMenuOpen] = useState(false);
+    return (
+      <div className="relative group">
+        <div
+          className="rounded-lg border bg-card p-2.5 transition-all duration-150 hover:shadow-md hover:scale-[1.01]"
+          style={{ borderLeft: `3px solid ${getTeamColor(training.team.id)}` }}
+        >
+          <div className="flex items-start justify-between gap-1">
+            <div 
+              className="flex-1 cursor-pointer"
+              onClick={() => router.push(`/trainings/${training.id}`)}
+            >
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground mb-1">
+                <Clock className="h-3 w-3" />
+                <span>{training.startTime}{training.endTime ? ` - ${training.endTime}` : ""}</span>
+              </div>
+              <p className="text-xs font-medium text-foreground truncate">{training.team.name}</p>
+              {training.court && training.court.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full mt-1">
+                  {training.court.join(", ")}
+                </Badge>
+              )}
+              {training.coach && (
+                <p className="text-[11px] text-muted-foreground truncate mt-0.5">{training.coach.user.name} {training.coach.user.surname}</p>
+              )}
             </div>
-            <p className="text-xs font-medium text-foreground truncate">{training.team.name}</p>
-            {training.court && <Badge variant="secondary" className="text-[10px] px-1.5 py-0 rounded-full mt-1">{training.court}</Badge>}
-            {training.coach && (
-              <p className="text-[11px] text-muted-foreground truncate mt-0.5">{training.coach.user.name} {training.coach.user.surname}</p>
-            )}
-          </div>
-          <div className="relative">
-            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div 
+              className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center"
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            >
               <MoreHorizontal className="h-3 w-3" />
-            </Button>
-            <div className="absolute right-0 top-0 hidden group-hover:flex flex-col bg-popover border rounded-md shadow-md z-10 min-w-[100px]">
-              <button className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors" onClick={() => openEdit(training)}>
-                <Pencil className="h-3 w-3" /> Editar
-              </button>
-              <button className="flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-muted transition-colors" onClick={() => setDeleteId(training.id)}>
-                <Trash2 className="h-3 w-3" /> Eliminar
-              </button>
             </div>
           </div>
         </div>
+        {menuOpen && (
+          <div className="absolute right-0 top-0 flex flex-col bg-popover border rounded-md shadow-md z-10 min-w-[100px]">
+            <div 
+              className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-muted transition-colors cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); openEdit(training); }}
+            >
+              <Pencil className="h-3 w-3" /> Editar
+            </div>
+            <div 
+              className="flex items-center gap-2 px-3 py-1.5 text-xs text-destructive hover:bg-muted transition-colors cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setDeleteId(training.id); }}
+            >
+              <Trash2 className="h-3 w-3" /> Eliminar
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <DashboardLayout>
@@ -472,11 +515,32 @@ export default function TrainingsPage() {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="icon" onClick={() => setSelectedClub(null)}><ChevronLeft className="h-5 w-5" /></Button>
-              <div>
-                <h1 className="text-xl font-medium">{selectedClub.name}</h1>
-                <p className="text-sm text-muted-foreground">Entrenamientos</p>
-              </div>
+              {userRole === "GLOBAL_ADMIN" && clubs.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <Select value={selectedClub?.id || ""} onValueChange={(value) => {
+                    const club = clubs.find(c => c.id === value);
+                    if (club) setSelectedClub(club);
+                  }}>
+                    <SelectTrigger className="w-[250px]">
+                      <SelectValue placeholder="Seleccionar club" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clubs.map(club => (
+                        <SelectItem key={club.id} value={club.id}>
+                          {club.name} - {club.city}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {userRole !== "GLOBAL_ADMIN" && (
+                <div>
+                  <h1 className="text-xl font-medium">{selectedClub.name}</h1>
+                  <p className="text-sm text-muted-foreground">Entrenamientos</p>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -520,14 +584,33 @@ export default function TrainingsPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Pista</label>
-                    <Select value={formData.court} onValueChange={v => setFormData({ ...formData, court: v === "__none__" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar pista" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Sin pista</SelectItem>
-                        {courtOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <label className="text-sm font-medium">Pistas</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {courtOptions.map(c => {
+                        const checked = formData.courts.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                courts: checked
+                                  ? formData.courts.filter(x => x !== c)
+                                  : [...formData.courts, c],
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                              checked
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium">Equipo / grupo</label>
@@ -583,16 +666,35 @@ export default function TrainingsPage() {
                   <Input type="time" value={editFormData.endTime} onChange={e => setEditFormData({ ...editFormData, endTime: e.target.value })} />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Pista</label>
-                <Select value={editFormData.court || "__none__"} onValueChange={v => setEditFormData({ ...editFormData, court: v === "__none__" ? "" : v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sin pista</SelectItem>
-                    {courtOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div>
+                    <label className="text-sm font-medium">Pistas</label>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {courtOptions.map(c => {
+                        const checked = editFormData.courts.includes(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => {
+                              setEditFormData({
+                                ...editFormData,
+                                courts: checked
+                                  ? editFormData.courts.filter(x => x !== c)
+                                  : [...editFormData.courts, c],
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                              checked
+                                ? "bg-primary text-primary-foreground border-primary"
+                                : "bg-background hover:bg-muted border-input"
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
               <div>
                 <label className="text-sm font-medium">Equipo</label>
                 <Select value={editFormData.teamId} onValueChange={v => setEditFormData({ ...editFormData, teamId: v })}>
@@ -629,7 +731,9 @@ export default function TrainingsPage() {
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Eliminar sesión</AlertDialogTitle>
-              <AlertDialogDescription>¿Estás seguro de que deseas eliminar esta sesión de entrenamiento? Esta acción no se puede deshacer.</AlertDialogDescription>
+              <AlertDialogDescription>
+                ¿Estás seguro de que deseas eliminar esta sesión? Podrás recuperarla durante 5 minutos.
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
@@ -639,6 +743,19 @@ export default function TrainingsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Restore notification */}
+        {recentlyDeleted && (
+          <div className="fixed bottom-4 right-4 bg-amber-50 border border-amber-200 rounded-lg shadow-lg p-4 flex items-center gap-3 z-50">
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-900">Sesión eliminada</p>
+              <p className="text-xs text-amber-700">{recentlyDeleted.title}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleRestore} className="border-amber-300 hover:bg-amber-100">
+              Deshacer
+            </Button>
+          </div>
+        )}
 
         {/* Templates Sheet */}
         <Sheet open={showTemplatesSheet} onOpenChange={setShowTemplatesSheet}>

@@ -33,7 +33,12 @@ export async function GET(req: Request) {
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
     });
 
-    return NextResponse.json(trainings);
+    const parsed = trainings.map((t) => ({
+      ...t,
+      court: t.court ? JSON.parse(t.court) : null,
+    }));
+
+    return NextResponse.json(parsed);
   } catch (error) {
     console.error("[TRAININGS_GET]", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
@@ -49,7 +54,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { clubId, teamId, coachId, court, date, startTime, endTime, notes } = body;
+    const { clubId, teamId, coachId, courts, date, startTime, endTime, notes } = body;
 
     if (!clubId || !teamId || !date || !startTime || !endTime) {
       return NextResponse.json({ error: "Campos obligatorios: clubId, teamId, date, startTime, endTime" }, { status: 400 });
@@ -60,13 +65,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
     }
 
+    const courtValue = Array.isArray(courts) && courts.length > 0 ? JSON.stringify(courts) : null;
+
     const training = await prismadb.training.create({
       data: {
         title: team.name,
         clubId,
         teamId,
         coachId: coachId || null,
-        court: court || null,
+        court: courtValue,
         date: new Date(date),
         startTime,
         endTime,
@@ -78,7 +85,12 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json(training, { status: 201 });
+    const parsed = {
+      ...training,
+      court: training.court ? JSON.parse(training.court) : null,
+    };
+
+    return NextResponse.json(parsed, { status: 201 });
   } catch (error) {
     console.error("[TRAININGS_POST]", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

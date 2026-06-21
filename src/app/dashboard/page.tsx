@@ -2,27 +2,24 @@
 
 import { useSession } from "next-auth/react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Users,
   Calendar,
-  Trophy,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertCircle,
   Swords,
   Building2,
+  ClipboardList,
+  Bell,
+  UserCheck,
+  AlertCircle,
+  Trophy,
+  ExternalLink,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from "next/link";
 
 interface Team {
   id: string;
@@ -41,6 +38,7 @@ interface Match {
   homeTeam: { id: string; name: string; category: string };
   awayTeam: { id: string; name: string; category: string };
   matchday?: { number: number; name: string };
+  result?: { id: string; homeScore: number; awayScore: number } | null;
 }
 
 interface Training {
@@ -54,14 +52,16 @@ interface Training {
   _count?: { players: number };
 }
 
-interface Standing {
-  position: number;
-  team: { name: string };
-  points: number;
-  wins: number;
-  losses: number;
-  setsWon: number;
-  setsLost: number;
+interface Convocatoria {
+  id: string;
+  teamId: string;
+  rival: string;
+  matchDate: string;
+  deadline: string;
+  status: "BORRADOR" | "ENVIADA";
+  confirmados: number;
+  totalJugadores: number;
+  team: { id: string; name: string; category: string };
 }
 
 interface Club {
@@ -78,7 +78,7 @@ export default function DashboardPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
   const [trainings, setTrainings] = useState<Training[]>([]);
-  const [standings, setStandings] = useState<Standing[]>([]);
+  const [convocatorias, setConvocatorias] = useState<Convocatoria[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [selectedClubId, setSelectedClubId] = useState<string>(userClubId || "");
   const [loading, setLoading] = useState(true);
@@ -87,18 +87,12 @@ export default function DashboardPage() {
     async function fetchData() {
       try {
         setLoading(true);
-        console.log("🔍 Dashboard: Iniciando carga de datos...");
-        console.log("👤 Usuario:", session?.user);
-        console.log("🏢 Club ID:", userClubId);
-        console.log("🔑 Rol:", userRole);
 
         // Si es administrador global, cargar lista de clubs
         if (userRole === "GLOBAL_ADMIN") {
-          console.log("👑 Modo administrador global detectado");
           const clubsRes = await fetch("/api/clubs");
           if (clubsRes.ok) {
             const clubsData = await clubsRes.json();
-            console.log("📊 Clubs disponibles:", clubsData);
             setClubs(clubsData);
             
             // Si no hay club seleccionado y hay clubs, seleccionar el primero
@@ -110,22 +104,16 @@ export default function DashboardPage() {
 
         // Si no hay clubId para cargar datos específicos, salir
         if (!selectedClubId) {
-          console.log("⚠️ No hay clubId seleccionado");
           setLoading(false);
           return;
         }
 
         // Fetch teams
         const teamsUrl = `/api/teams?clubId=${selectedClubId}&deleted=false`;
-        console.log("📡 Fetching teams from:", teamsUrl);
         const teamsRes = await fetch(teamsUrl);
-        console.log("✅ Teams response status:", teamsRes.status);
         if (teamsRes.ok) {
           const teamsData = await teamsRes.json();
-          console.log("📊 Teams data:", teamsData);
           setTeams(teamsData);
-        } else {
-          console.error("❌ Error fetching teams:", teamsRes.status, teamsRes.statusText);
         }
 
         // Fetch upcoming matches (next 7 days)
@@ -133,61 +121,35 @@ export default function DashboardPage() {
         const nextWeek = new Date(today);
         nextWeek.setDate(nextWeek.getDate() + 7);
         const matchesUrl = `/api/matches?clubId=${selectedClubId}&status=SCHEDULED&startDate=${today.toISOString()}&endDate=${nextWeek.toISOString()}`;
-        console.log("📡 Fetching matches from:", matchesUrl);
         const matchesRes = await fetch(matchesUrl);
-        console.log("✅ Matches response status:", matchesRes.status);
         if (matchesRes.ok) {
           const matchesData = await matchesRes.json();
-          console.log("📊 Matches data:", matchesData);
           setMatches(matchesData.slice(0, 5));
-        } else {
-          console.error("❌ Error fetching matches:", matchesRes.status, matchesRes.statusText);
         }
 
         // Fetch upcoming trainings (next 7 days)
         const trainingsUrl = `/api/trainings?clubId=${selectedClubId}&startDate=${today.toISOString()}&endDate=${nextWeek.toISOString()}`;
-        console.log("📡 Fetching trainings from:", trainingsUrl);
         const trainingsRes = await fetch(trainingsUrl);
-        console.log("✅ Trainings response status:", trainingsRes.status);
         if (trainingsRes.ok) {
           const trainingsData = await trainingsRes.json();
-          console.log("📊 Trainings data:", trainingsData);
           setTrainings(trainingsData.slice(0, 5));
-        } else {
-          console.error("❌ Error fetching trainings:", trainingsRes.status, trainingsRes.statusText);
         }
 
-        // Fetch standings (first active league for the club)
-        const leaguesUrl = `/api/leagues?clubId=${selectedClubId}`;
-        console.log("📡 Fetching leagues from:", leaguesUrl);
-        const leaguesRes = await fetch(leaguesUrl);
-        console.log("✅ Leagues response status:", leaguesRes.status);
-        if (leaguesRes.ok) {
-          const leaguesData = await leaguesRes.json();
-          console.log("📊 Leagues data:", leaguesData);
-          if (leaguesData.length > 0) {
-            const standingsUrl = `/api/standings?leagueId=${leaguesData[0].id}`;
-            console.log("📡 Fetching standings from:", standingsUrl);
-            const standingsRes = await fetch(standingsUrl);
-            console.log("✅ Standings response status:", standingsRes.status);
-            if (standingsRes.ok) {
-              const standingsData = await standingsRes.json();
-              console.log("📊 Standings data:", standingsData);
-              setStandings(standingsData.slice(0, 8));
-            } else {
-              console.error("❌ Error fetching standings:", standingsRes.status, standingsRes.statusText);
-            }
-          } else {
-            console.log("⚠️ No leagues found for this club");
-          }
-        } else {
-          console.error("❌ Error fetching leagues:", leaguesRes.status, leaguesRes.statusText);
+        // Fetch convocatorias pendientes
+        const convocatoriasUrl = `/api/convocatorias?clubId=${selectedClubId}`;
+        const convocatoriasRes = await fetch(convocatoriasUrl);
+        if (convocatoriasRes.ok) {
+          const convocatoriasData = await convocatoriasRes.json();
+          // Filtrar convocatorias pendientes (sin completar)
+          const pending = convocatoriasData.filter((c: Convocatoria) => 
+            c.status === "BORRADOR" || c.confirmados < c.totalJugadores
+          );
+          setConvocatorias(pending.slice(0, 5));
         }
       } catch (error) {
-        console.error("❌ Error fetching dashboard data:", error);
+        console.error("Error fetching dashboard data:", error);
       } finally {
         setLoading(false);
-        console.log("✅ Dashboard: Carga de datos finalizada");
       }
     }
 
@@ -198,22 +160,26 @@ export default function DashboardPage() {
 
   // Calculate stats
   const totalTeams = teams.length;
+  const totalPlayers = teams.reduce((acc, t) => acc + (t._count?.players || 0), 0);
   const upcomingTrainings = trainings.length;
   const upcomingMatches = matches.length;
 
-  // Get user's team for standings highlight
-  const userPlayer = (session?.user as any)?.player;
-  const userTeamId = userPlayer?.teamId;
-  const userTeam = teams.find(t => t.id === userTeamId);
+  // Formato de fecha completo
+  const formatFullDate = (date: Date, time: string) => {
+    const dateStr = date.toLocaleDateString("es-ES", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+    return `${dateStr} · ${time}`;
+  };
 
   if (loading) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Cargando...
-            </h1>
+            <h1 className="text-3xl font-bold tracking-tight">Cargando...</h1>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[1, 2, 3, 4].map(i => (
@@ -270,7 +236,8 @@ export default function DashboardPage() {
             value={totalTeams.toString()}
             description={`${teams.filter(t => t.category === "MASCULINO").length} masculinos, ${teams.filter(t => t.category === "FEMENINO").length} femeninos, ${teams.filter(t => t.category === "MIXTO").length} mixtos`}
             icon={Users}
-            trend={`${teams.reduce((acc, t) => acc + t._count.players, 0)} jugadores totales`}
+            trend={`${totalPlayers} jugadores totales`}
+            href="/teams"
           />
           <StatCard
             title="Próximos Entrenamientos"
@@ -279,9 +246,10 @@ export default function DashboardPage() {
             icon={Calendar}
             trend={
               trainings.length > 0
-                ? `Próximo: ${trainings[0].startTime}`
+                ? formatFullDate(new Date(trainings[0].date), trainings[0].startTime)
                 : "Sin entrenamientos"
             }
+            href="/trainings"
           />
           <StatCard
             title="Partidos Pendientes"
@@ -293,33 +261,111 @@ export default function DashboardPage() {
                 ? `${matches[0].homeTeam.name} vs ${matches[0].awayTeam.name}`
                 : "Sin partidos"
             }
+            href="/matches"
           />
           <StatCard
-            title="Clasificación"
-            value={
-              userTeam
-                ? `${userTeam.name}`
-                : standings.length > 0
-                ? `${standings[0].team.name}`
-                : "N/A"
-            }
-            description={
-              userTeam
-                ? `Posición ${standings.find(s => s.team.name === userTeam.name)?.position || "-"}`
-                : standings.length > 0
-                ? "Liga activa"
-                : "Sin liga activa"
-            }
-            icon={Trophy}
-            trend={
-              userTeam
-                ? `${standings.find(s => s.team.name === userTeam.name)?.points || 0} puntos`
-                : standings.length > 0
-                ? `${standings[0].points} puntos (1º)`
-                : "-"
-            }
+            title="Jugadores"
+            value={totalPlayers.toString()}
+            description="En el club"
+            icon={UserCheck}
+            trend={`${teams.length} equipos`}
+            href="/players"
           />
         </div>
+
+        {/* Tareas Pendientes / Resumen de Actividad */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-primary" />
+              Tareas Pendientes
+            </CardTitle>
+            <CardDescription>
+              Acciones que requieren tu atención
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Convocatorias sin completar */}
+              <PendingItem
+                title="Convocatorias pendientes"
+                count={convocatorias.length}
+                icon={ClipboardList}
+                items={convocatorias.map(c => ({
+                  id: c.id,
+                  title: `${c.team.name} vs ${c.rival}`,
+                  subtitle: `${c.confirmados}/${c.totalJugadores} confirmados`,
+                  href: `/convocations`,
+                  status: c.status === "BORRADOR" ? "Borrador" : "Enviada",
+                }))}
+                emptyMessage="No hay convocatorias pendientes"
+              />
+
+              {/* Partidos sin resultado */}
+              <PendingItem
+                title="Partidos sin resultado"
+                count={matches.filter(m => !m.result).length}
+                icon={Swords}
+                items={matches
+                  .filter(m => !m.result)
+                  .map(m => ({
+                    id: m.id,
+                    title: `${m.homeTeam.name} vs ${m.awayTeam.name}`,
+                    subtitle: formatFullDate(new Date(m.matchDate), m.matchTime || "TBD"),
+                    href: `/matches/${m.id}`,
+                    status: "Pendiente",
+                  }))}
+                emptyMessage="No hay partidos pendientes de resultado"
+              />
+
+              {/* Próxima jornada de Liga */}
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-primary" />
+                    Próxima jornada
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Consulta las clasificaciones externas
+                    </p>
+                    <Link href="/league">
+                      <Button variant="outline" size="sm" className="w-full gap-2">
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Ver Liga
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Acción rápida */}
+              <Card className="border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <ClipboardList className="h-4 w-4 text-primary" />
+                    Acción rápida
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Crea una nueva convocatoria
+                    </p>
+                    <Link href="/convocations">
+                      <Button size="sm" className="w-full gap-2">
+                        <ClipboardList className="h-3.5 w-3.5" />
+                        Nueva Convocatoria
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-2">
@@ -344,12 +390,7 @@ export default function DashboardPage() {
                       key={match.id}
                       homeTeam={match.homeTeam.name}
                       awayTeam={match.awayTeam.name}
-                      date={new Date(match.matchDate).toLocaleDateString("es-ES", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                      time={match.matchTime || "TBD"}
+                      date={formatFullDate(new Date(match.matchDate), match.matchTime || "TBD")}
                       court={match.court || "Por determinar"}
                       status={match.status}
                     />
@@ -379,12 +420,7 @@ export default function DashboardPage() {
                     <TrainingItem
                       key={training.id}
                       title={training.title}
-                      date={new Date(training.date).toLocaleDateString("es-ES", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                      })}
-                      time={`${training.startTime}${training.endTime ? ` - ${training.endTime}` : ""}`}
+                      date={formatFullDate(new Date(training.date), `${training.startTime}${training.endTime ? ` - ${training.endTime}` : ""}`)}
                       facility={training.facility || "Por determinar"}
                       attendees={training._count?.players || 0}
                       total={teams.find(t => t.id === training.team.id)?._count.players || 10}
@@ -392,77 +428,6 @@ export default function DashboardPage() {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Standing */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-primary" />
-                Clasificación
-              </CardTitle>
-              <CardDescription>
-                {standings.length > 0 ? "Liga activa" : "Sin liga activa"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {standings.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No hay clasificación disponible
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {standings.map(standing => (
-                    <StandingRow
-                      key={standing.team.name}
-                      position={standing.position}
-                      team={standing.team.name}
-                      points={standing.points}
-                      wins={standing.wins}
-                      losses={standing.losses}
-                      sets={`+${standing.setsWon - standing.setsLost}`}
-                      highlight={userTeam?.name === standing.team.name}
-                    />
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary" />
-                Actividad Reciente
-              </CardTitle>
-              <CardDescription>Últimas actualizaciones</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {matches.slice(0, 2).map(match => (
-                  <ActivityItem
-                    key={match.id}
-                    type="result"
-                    text={`Partido programado: ${match.homeTeam.name} vs ${match.awayTeam.name}`}
-                    time={new Date(match.matchDate).toLocaleDateString("es-ES")}
-                  />
-                ))}
-                {trainings.slice(0, 2).map(training => (
-                  <ActivityItem
-                    key={training.id}
-                    type="training"
-                    text={`Entrenamiento: ${training.title}`}
-                    time={new Date(training.date).toLocaleDateString("es-ES")}
-                  />
-                ))}
-                {matches.length === 0 && trainings.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Sin actividad reciente
-                  </p>
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -492,29 +457,90 @@ function StatCard({
   description,
   icon: Icon,
   trend,
+  href,
 }: {
   title: string;
   value: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   trend: string;
+  href: string;
 }) {
   return (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold">{value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{description}</p>
-            <p className="text-xs text-primary mt-1">{trend}</p>
+    <Link href={href}>
+      <Card className="cursor-pointer transition-shadow hover:shadow-md">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">{title}</p>
+              <p className="text-3xl font-bold">{value}</p>
+              <p className="text-xs text-muted-foreground mt-1">{description}</p>
+              <p className="text-xs text-primary mt-1">{trend}</p>
+            </div>
+            <div className="rounded-lg bg-primary/10 p-3">
+              <Icon className="h-6 w-6 text-primary" />
+            </div>
           </div>
-          <div className="rounded-lg bg-primary/10 p-3">
-            <Icon className="h-6 w-6 text-primary" />
-          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function PendingItem({
+  title,
+  count,
+  icon: Icon,
+  items,
+  emptyMessage,
+}: {
+  title: string;
+  count: number;
+  icon: React.ComponentType<{ className?: string }>;
+  items: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    href: string;
+    status: string;
+  }>;
+  emptyMessage: string;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium flex items-center gap-2">
+          <Icon className="h-4 w-4 text-primary" />
+          {title}
+        </h3>
+        {count > 0 && (
+          <Badge variant="secondary" className="text-xs">
+            {count}
+          </Badge>
+        )}
+      </div>
+      {count === 0 ? (
+        <p className="text-xs text-muted-foreground py-2">{emptyMessage}</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map(item => (
+            <Link
+              key={item.id}
+              href={item.href}
+              className="flex items-start justify-between rounded-lg border p-2.5 transition-colors hover:bg-muted/50"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{item.title}</p>
+                <p className="text-xs text-muted-foreground">{item.subtitle}</p>
+              </div>
+              <Badge variant="outline" className="text-xs ml-2">
+                {item.status}
+              </Badge>
+            </Link>
+          ))}
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
@@ -522,14 +548,12 @@ function MatchItem({
   homeTeam,
   awayTeam,
   date,
-  time,
   court,
   status,
 }: {
   homeTeam: string;
   awayTeam: string;
   date: string;
-  time: string;
   court: string;
   status: string;
 }) {
@@ -542,7 +566,7 @@ function MatchItem({
           <span>{awayTeam}</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          {date} · {time} · {court}
+          {date} · {court}
         </p>
       </div>
       <Badge variant="outline">
@@ -555,14 +579,12 @@ function MatchItem({
 function TrainingItem({
   title,
   date,
-  time,
   facility,
   attendees,
   total,
 }: {
   title: string;
   date: string;
-  time: string;
   facility: string;
   attendees: number;
   total: number;
@@ -574,7 +596,7 @@ function TrainingItem({
         <div>
           <p className="text-sm font-medium">{title}</p>
           <p className="text-xs text-muted-foreground">
-            {date} · {time} · {facility}
+            {date} · {facility}
           </p>
         </div>
         <div className="text-right">
@@ -588,76 +610,6 @@ function TrainingItem({
             />
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StandingRow({
-  position,
-  team,
-  points,
-  wins,
-  losses,
-  sets,
-  highlight,
-}: {
-  position: number;
-  team: string;
-  points: number;
-  wins: number;
-  losses: number;
-  sets: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-        highlight ? "bg-primary/5 border border-primary/20" : ""
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <span className="w-6 text-center font-bold text-muted-foreground">
-          {position}º
-        </span>
-        <span className={`font-medium ${highlight ? "text-primary" : ""}`}>
-          {team}
-        </span>
-      </div>
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span>{wins}V</span>
-        <span>{losses}D</span>
-        <span>{sets}</span>
-        <span className="w-8 text-right font-bold text-foreground">
-          {points}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function ActivityItem({
-  type,
-  text,
-  time,
-}: {
-  type: "result" | "convocation" | "training" | "general";
-  text: string;
-  time: string;
-}) {
-  const icons = {
-    result: <CheckCircle className="h-4 w-4 text-green-500" />,
-    convocation: <AlertCircle className="h-4 w-4 text-yellow-500" />,
-    training: <Calendar className="h-4 w-4 text-blue-500" />,
-    general: <TrendingUp className="h-4 w-4 text-gray-500" />,
-  };
-
-  return (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5">{icons[type]}</div>
-      <div className="flex-1">
-        <p className="text-sm">{text}</p>
-        <p className="text-xs text-muted-foreground">{time}</p>
       </div>
     </div>
   );

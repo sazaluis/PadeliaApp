@@ -24,11 +24,11 @@ Esto aplica para:
 ### 2. Implementación del Selector de Club en Páginas
 
 #### Páginas ACTUALIZADAS con selector para GLOBAL_ADMIN:
-- ✅ **Clubs** (`/clubs`): Gestión de clubes (no requiere selector, es la página principal de clubs)
+- ✅ **Clubs** (`/clubs`): Ahora tiene selector de club (filtra la vista de clubs)
 - ✅ **Teams** (`/teams`): Ahora tiene selector de club para administradores
 - ✅ **Players** (`/players`): Ahora tiene selector de club para administradores
-- ✅ **Trainings** (`/trainings`): Ya tenía selector implementado
-- ✅ **Convocations** (`/convocations`): Ya tenía selector implementado
+- ✅ **Trainings** (`/trainings`): Auto-selecciona el primer club para admin, muestra directamente los entrenamientos
+- ✅ **Convocations** (`/convocations`): Ahora tiene selector de club para administradores
 - ✅ **Matches** (`/matches`): Ahora tiene selector de club para administradores
 - ✅ **League** (`/league`): Ahora tiene selector de club para administradores
 - ✅ **Notifications** (`/notifications`): Ahora tiene selector de club para administradores
@@ -40,10 +40,10 @@ Esto aplica para:
 ## Comportamiento por Rol
 
 ### GLOBAL_ADMIN (Administrador Global)
-- Ve el selector de club en: Teams, Players, Trainings, Convocations, Matches, League, Notifications
+- Ve el selector de club en: Teams, Players, Trainings, Convocations, Matches, League, Notifications, Clubs
 - Puede cambiar entre clubs libremente
 - Los datos se filtran según el club seleccionado
-- En Clubs ve todos los clubs (es la página de gestión de clubs)
+- En Trainings: se auto-selecciona el primer club y muestra directamente los entrenamientos (sin grid de selección)
 
 ### CLUB_MANAGER (Responsable de Club)
 - NO ve el selector (se asigna automáticamente a su club)
@@ -61,6 +61,9 @@ Esto aplica para:
 4. `padelia/src/app/teams/page.tsx` - Agregado selector de club
 5. `padelia/src/app/players/page.tsx` - Agregado selector de club
 6. `padelia/src/app/notifications/page.tsx` - Agregado selector de club
+7. `padelia/src/app/clubs/page.tsx` - Agregado selector de club
+8. `padelia/src/app/trainings/page.tsx` - Auto-selección de club para admin
+9. `padelia/src/app/convocations/page.tsx` - Agregado selector de club
 
 ## Características del Selector
 
@@ -72,6 +75,24 @@ Esto aplica para:
   - Solo visible para GLOBAL_ADMIN
   - Se carga automáticamente el primer club si no hay uno seleccionado
   - Al cambiar de club, se actualizan todos los datos de la página
+  - En Trainings: el admin ve directamente los entrenamientos del primer club
+
+## Cambios Específicos por Página
+
+### Trainings (`/trainings`)
+- **Antes**: Mostraba grid de 3 clubs para seleccionar
+- **Ahora**: Auto-selecciona el primer club para admin, muestra directamente el calendario de entrenamientos
+- Para usuarios no-admin: muestra su club automáticamente
+
+### Clubs (`/clubs`)
+- Selector permite filtrar la vista de clubs
+- Opción "Todos los clubes" disponible
+- Para no-admin: muestra solo su club
+
+### Convocations (`/convocations`)
+- Selector filtra las convocatorias por club
+- Admin puede ver convocatorias de un club específico o de todos
+- No-admin: ve solo convocatorias de su club
 
 ## Testing
 
@@ -87,6 +108,7 @@ Para probar la implementación:
    - Cualquier endpoint que llame a `/api/leagues`
 
 3. Verificar que el selector de club aparece para GLOBAL_ADMIN en:
+   - `/clubs`
    - `/teams`
    - `/players`
    - `/trainings`
@@ -99,6 +121,8 @@ Para probar la implementación:
 
 5. Verificar que usuarios no-admin NO ven el selector y solo ven datos de su club
 
+6. Verificar que en Trainings, el admin ve directamente los entrenamientos sin necesidad de seleccionar club
+
 ## Notas Técnicas
 
 - El selector usa el componente `Select` de shadcn/ui
@@ -106,3 +130,4 @@ Para probar la implementación:
 - El estado del selector se sincroniza con la sesión del usuario
 - Para usuarios no-admin, se usa su `clubId` de la sesión
 - Para admin, se carga la lista completa de clubs desde `/api/clubs`
+- En Trainings se eliminó la vista de grid de selección de clubs para admin

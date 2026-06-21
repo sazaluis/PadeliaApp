@@ -125,7 +125,6 @@ model Team {
   trainings   Training[]
   trainingTemplates TrainingTemplate[]
   standings   Standing[]
-  asistenciasOrigen AsistenciaEntrenamiento[] @relation("AsistenciaEntrenamientoEquipoOrigen")
 
   @@unique([clubId, name, category])
   @@index([clubId])
@@ -162,7 +161,6 @@ model Player {
   parejasComoJugador1 Pareja[] @relation("ParejaJugador1")
   parejasComoJugador2 Pareja[] @relation("ParejaJugador2")
   trainings         TrainingPlayer[]
-  asistencias       AsistenciaEntrenamiento[]
 
   @@index([teamId])
   @@index([clubId])
@@ -351,7 +349,7 @@ model ConvocationPlayer {
 }
 
 model Training {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String?
   date        DateTime
@@ -359,7 +357,7 @@ model Training {
   endTime     String?
   duration    Int?
   facility    String?
-  court       String?    // JSON array of court names, e.g. ["Pista 1","Pista 2"]
+  court       String?    // pista/court name
   objectives  String?
   notes       String?
   isCancelled Boolean  @default(false)
@@ -386,26 +384,32 @@ model TrainingPlayer {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())
   trainingId  String
-  training    Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  training    Training @relation(fields: [trainingId], references: [id])
   playerId    String
   player      Player   @relation(fields: [playerId], references: [id])
   @@unique([trainingId, playerId])
+}
+
+enum AsistenciaEstado {
+  PENDIENTE
+  CONFIRMADO
+  AUSENTE
 }
 
 model AsistenciaEntrenamiento {
   id              String   @id @default(cuid())
   entrenamientoId String
   jugadorId       String
-  estado          String   @default("PENDIENTE") // PENDIENTE | CONFIRMADO | AUSENTE
+  estado          AsistenciaEstado @default(PENDIENTE)
   esInvitado      Boolean  @default(false)
   equipoOrigenId  String?
   pistaAsignada   Int?
   creadoEn        DateTime @default(now())
   actualizadoEn   DateTime @updatedAt
 
-  entrenamiento   Training @relation(fields: [entrenamientoId], references: [id], onDelete: Cascade)
+  entrenamiento   Training @relation(fields: [entrenamientoId], references: [id])
   jugador         Player   @relation(fields: [jugadorId], references: [id])
-  equipoOrigen    Team?    @relation("AsistenciaEntrenamientoEquipoOrigen", fields: [equipoOrigenId], references: [id])
+  equipoOrigen    Team?    @relation(fields: [equipoOrigenId], references: [id])
 
   @@unique([entrenamientoId, jugadorId])
 }
@@ -419,7 +423,7 @@ model Attendance {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   trainingId  String
-  training    Training @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  training    Training @relation(fields: [trainingId], references: [id])
   playerId    String
   player      Player   @relation(fields: [playerId], references: [id])
   @@unique([trainingId, playerId])
