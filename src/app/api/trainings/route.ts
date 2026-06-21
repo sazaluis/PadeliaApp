@@ -33,9 +33,19 @@ export async function GET(req: Request) {
       orderBy: [{ date: "asc" }, { startTime: "asc" }],
     });
 
+    function parseCourt(value: string | null): string[] | null {
+      if (!value) return null;
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        return [value];
+      }
+    }
+
     const parsed = trainings.map((t) => ({
       ...t,
-      court: t.court ? JSON.parse(t.court) : null,
+      court: parseCourt(t.court),
     }));
 
     return NextResponse.json(parsed);
@@ -87,7 +97,7 @@ export async function POST(req: Request) {
 
     const parsed = {
       ...training,
-      court: training.court ? JSON.parse(training.court) : null,
+      court: parseCourt(training.court),
     };
 
     return NextResponse.json(parsed, { status: 201 });

@@ -7,8 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Clock, MapPin, Users, Dumbbell, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, Clock, MapPin, Users, Dumbbell, Trash2, Pencil, X, Save } from "lucide-react";
 import { AsistenciaEntrenamiento } from "@/components/trainings/asistencia-entrenamiento";
+import { TimeInput, addHourAndHalf } from "@/components/ui/time-input";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -40,13 +44,32 @@ interface Training {
   } | null;
 }
 
+interface Coach {
+  id: string;
+  user: { name: string; surname: string };
+}
+
 export default function TrainingDetailPage() {
   const params = useParams();
   const trainingId = params.trainingId as string;
+  const router = useRouter();
   const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    date: "",
+    startTime: "",
+    endTime: "",
+    courts: [] as string[],
+    coachId: "",
+    notes: "",
+  });
+  const [clubCourts, setClubCourts] = useState(0);
+  const [coaches, setCoaches] = useState<Coach[]>([]);
 
   useEffect(() => {
     const fetchTraining = async () => {
@@ -63,6 +86,55 @@ export default function TrainingDetailPage() {
     };
     fetchTraining();
   }, [trainingId]);
+
+  useEffect(() => {
+    if (!training?.team?.club?.id) return;
+    const clubId = training.team.club.id;
+    fetch(`/api/clubs/${clubId}`)
+      .then(r => r.json())
+      .then(data => { if (data?.courts) setClubCourts(data.courts); })
+      .catch(() => {});
+    fetch(`/api/coaches?clubId=${clubId}`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setCoaches(data); })
+      .catch(() => {});
+  }, [training]);
+
+  const openEdit = () => {
+    if (!training) return;
+    setEditForm({
+      date: format(new Date(training.date), "yyyy-MM-dd"),
+      startTime: training.startTime,
+      endTime: training.endTime || "",
+      courts: training.court || [],
+      coachId: training.coach?.id || "",
+      notes: training.notes || "",
+    });
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+  };
+
+  const saveEdit = async () => {
+    if (!training) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/trainings/${trainingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editForm),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setTraining(updated);
+      setEditing(false);
+    } catch {
+      setError("Error al guardar los cambios");
+    }
+    setSaving(false);
+  };
 
   if (loading) {
     return (
@@ -110,6 +182,8 @@ export default function TrainingDetailPage() {
     }
   };
 
+  const courtOptions = Array.from({ length: clubCourts }, (_, i) => `Pista ${i + 1}`);
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
@@ -125,89 +199,197 @@ export default function TrainingDetailPage() {
               {training.team.name} · {training.team.category}
             </p>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleDelete}
-            disabled={deleting}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            {deleting ? "Eliminando..." : "Eliminar"}
-          </Button>
+          {editing ? (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={cancelEdit}>
+                <X className="mr-1.5 h-4 w-4" />Cancelar
+              </Button>
+              <Button size="sm" onClick={saveEdit} disabled={saving}>
+                <Save className="mr-1.5 h-4 w-4" />
+                {saving ? "Guardando..." : "Guardar"}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={openEdit}>
+                <Pencil className="mr-1.5 h-4 w-4" />Editar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleting}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                {deleting ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </div>
+          )}
         </div>
 
-        {/* Info cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Info cards / Edit form */}
+        {editing ? (
           <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-md">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
+            <CardHeader>
+              <CardTitle className="text-base">Editar sesión</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-muted-foreground">Fecha</p>
-                  <p className="text-sm font-medium">
-                    {format(new Date(training.date), "d MMM yyyy", { locale: es })}
-                  </p>
+                  <label className="text-sm font-medium">Fecha</label>
+                  <Input
+                    type="date"
+                    value={editForm.date}
+                    onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                  />
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium">Hora inicio</label>
+                    <TimeInput
+                      value={editForm.startTime}
+                      onChange={(v) => setEditForm({
+                        ...editForm,
+                        startTime: v,
+                        endTime: addHourAndHalf(v),
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Hora fin</label>
+                    <TimeInput
+                      value={editForm.endTime}
+                      onChange={(v) => setEditForm({ ...editForm, endTime: v })}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium">Pistas</label>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {courtOptions.map(c => {
+                    const checked = editForm.courts.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => {
+                          setEditForm({
+                            ...editForm,
+                            courts: checked
+                              ? editForm.courts.filter(x => x !== c)
+                              : [...editForm.courts, c],
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          checked
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background hover:bg-muted border-input"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium">Entrenador</label>
+                <Select
+                  value={editForm.coachId || "__none__"}
+                  onValueChange={v => setEditForm({ ...editForm, coachId: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar entrenador" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin entrenador</SelectItem>
+                    {coaches.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.user.name} {c.user.surname}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm font-medium">Notas</label>
+                <Textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                  placeholder="Opcional"
+                />
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-primary/10 rounded-md">
-                  <Clock className="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Horario</p>
-                  <p className="text-sm font-medium">
-                    {training.startTime}
-                    {training.endTime ? ` - ${training.endTime}` : ""}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {training.court && training.court.length > 0 && (
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-md">
-                    <MapPin className="h-4 w-4 text-primary" />
+                    <Clock className="h-4 w-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Pistas</p>
-                    <p className="text-sm font-medium">{training.court.join(", ")}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {training.coach && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-primary/10 rounded-md">
-                    <Users className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Entrenador</p>
+                    <p className="text-xs text-muted-foreground">Fecha</p>
                     <p className="text-sm font-medium">
-                      {training.coach.user.name} {training.coach.user.surname}
+                      {format(new Date(training.date), "d MMM yyyy", { locale: es })}
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-          )}
-        </div>
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-md">
+                    <Clock className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Horario</p>
+                    <p className="text-sm font-medium">
+                      {training.startTime}
+                      {training.endTime ? ` - ${training.endTime}` : ""}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {training.court && training.court.length > 0 && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-md">
+                      <MapPin className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Pistas</p>
+                      <p className="text-sm font-medium">{training.court.join(", ")}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {training.coach && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-md">
+                      <Users className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Entrenador</p>
+                      <p className="text-sm font-medium">
+                        {training.coach.user.name} {training.coach.user.surname}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
 
         {/* Notes */}
-        {training.notes && (
+        {!editing && training.notes && (
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
@@ -222,10 +404,12 @@ export default function TrainingDetailPage() {
         )}
 
         {/* Asistencia component */}
-        <AsistenciaEntrenamiento 
-          entrenamientoId={trainingId} 
-          numPistas={training.court?.length || 2} 
-        />
+        {!editing && (
+          <AsistenciaEntrenamiento 
+            entrenamientoId={trainingId} 
+            numPistas={training.court?.length || 2} 
+          />
+        )}
       </div>
     </DashboardLayout>
   );
